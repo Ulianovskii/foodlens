@@ -1,12 +1,21 @@
-.PHONY: run stop restart logs install venv clean check-env
+.PHONY: run stop restart logs install venv clean check-env setup
 
-# Активация venv
-venv:
-	source venv/bin/activate && bash
+# Создание и настройка виртуального окружения
+setup:
+	python -m venv venv
+	@echo "✅ Виртуальное окружение создано"
+	@echo "🤖 Для активации выполните: source venv/bin/activate"
+	@echo "📦 Затем установите зависимости: make install"
 
 # Установка зависимостей
 install:
-	python -m pip install -r requirements.txt
+	@if [ -d "venv" ]; then \
+		source venv/bin/activate && python -m pip install -r requirements.txt; \
+		echo "✅ Зависимости установлены"; \
+	else \
+		echo "❌ Виртуальное окружение не найдено. Сначала выполните: make setup"; \
+		exit 1; \
+	fi
 
 # Проверка окружения
 check-env:
@@ -17,12 +26,24 @@ check-env:
 	fi
 	@echo "✅ Окружение настроено корректно"
 
+# Проверка venv
+check-venv:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Виртуальное окружение не найдено"; \
+		echo "🤖 Выполните: make setup"; \
+		exit 1; \
+	fi
+
 # Запуск бота
-run: check-env
+run: check-env check-venv
 	source venv/bin/activate && python -m app.bot
 
 # Запуск с авто-перезагрузкой при изменениях кода
-dev: check-env
+dev: check-env check-venv
+	@if ! source venv/bin/activate && python -c "import watchdog" 2>/dev/null; then \
+		echo "📦 Устанавливаем watchdog..."; \
+		source venv/bin/activate && pip install watchdog; \
+	fi
 	source venv/bin/activate && watchmedo auto-restart --pattern="*.py" --recursive -- python -m app.bot
 
 # Остановка бота
@@ -46,15 +67,24 @@ clean:
 	find . -type f -name "*.pyo" -delete
 	echo "✅ Кэш очищен"
 
+# Активация venv
+venv:
+	@if [ -d "venv" ]; then \
+		source venv/bin/activate && bash; \
+	else \
+		echo "❌ Виртуальное окружение не найдено. Выполните: make setup"; \
+	fi
+
 # Помощь
 help:
 	@echo "🍕 FoodLens Bot - Доступные команды:"
+	@echo "  make setup    - Создать виртуальное окружение"
+	@echo "  make install  - Установить зависимости"
 	@echo "  make run      - Запуск бота"
 	@echo "  make dev      - Запуск с авто-перезагрузкой"
 	@echo "  make stop     - Остановка бота"
 	@echo "  make restart  - Перезапуск бота"
 	@echo "  make logs     - Просмотр логов"
-	@echo "  make install  - Установка зависимостей"
 	@echo "  make venv     - Активация виртуального окружения"
 	@echo "  make clean    - Очистка кэша Python"
 	@echo "  make check-env - Проверка настроек окружения"
