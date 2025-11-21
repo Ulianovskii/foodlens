@@ -10,8 +10,13 @@ setup:
 # Установка зависимостей
 install:
 	@if [ -d "venv" ]; then \
-		source venv/bin/activate && python -m pip install -r requirements.txt; \
-		echo "✅ Зависимости установлены"; \
+		source venv/bin/activate && python -m pip install --upgrade pip && python -m pip install -r requirements.txt; \
+		if [ $$? -eq 0 ]; then \
+			echo "✅ Зависимости установлены"; \
+		else \
+			echo "❌ Ошибка установки зависимостей"; \
+			exit 1; \
+		fi \
 	else \
 		echo "❌ Виртуальное окружение не найдено. Сначала выполните: make setup"; \
 		exit 1; \
