@@ -4,7 +4,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from app.services.gpt_analyzer import FoodAnalysisService
+from app.services.gpt_analyzer import GPTAnalyzer
 from app.core.i18n import get_localization
 import logging
 import os
@@ -12,7 +12,7 @@ import os
 logger = logging.getLogger(__name__)
 
 photo_router = Router()
-gpt_analyzer = FoodAnalysisService()
+gpt_analyzer = GPTAnalyzer()
 
 class PhotoAnalysis(StatesGroup):
     waiting_for_photo = State()
