@@ -1,10 +1,6 @@
-from aiogram import Router
+from .photo_handler import router as photo_router
+from .base_handler import router as base_router
 
-from .basic_commands import basic_router
-from .photo_handler import photo_router
-
-router = Router()
-router.include_router(basic_router)
+# Объединяем все роутеры
+router = base_router
 router.include_router(photo_router)
-
-__all__ = ["router"]

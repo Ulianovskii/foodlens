@@ -1,0 +1,14 @@
+ТВОЙ КОД (app/bot.py)              ЧУЖОЙ КОД (aiogram)
+│                                  │
+├── from aiogram import ... ───────┼───► Берем классы из библиотеки
+│                                  │
+├── bot = Bot(token) ──────────────┼───► Создаем объект бота
+│                                  │
+├── dp = Dispatcher() ─────────────┼───► Создаем диспетчер  
+│                                  │
+└── await dp.start_polling(bot) ───┼───► ЗАПУСКАЕМ ЦИКЛ из библиотеки!
+                                   │
+                                   ▼
+                              while True: ♾️
+                                updates = await bot.get_updates()
+                                ... обработка ...
