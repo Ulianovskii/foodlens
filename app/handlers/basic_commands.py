@@ -51,16 +51,6 @@ async def cmd_history(message: Message):
     text = get_text('history_development')
     await message.answer(text)
 
-
-@basic_router.message(Command("analyze"))
-async def cmd_analyze(message: Message):
-    """
-    Обработчик команды /analyze
-    """
-    text = get_text('analyze_instructions')
-    await message.answer(text)
-
-
 @basic_router.message(Command("profile"))
 async def cmd_profile(message: Message):
     """
