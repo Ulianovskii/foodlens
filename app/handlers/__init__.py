@@ -1,4 +1,5 @@
-from .photo_handler import router as photo_router
+# app/handlers/__init__.py
+from .photo_handler import photo_router
 from .base_handler import router as base_router
 
 # Объединяем все роутеры
