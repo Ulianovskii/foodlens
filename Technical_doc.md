@@ -20,40 +20,31 @@ FoodLens - Telegram бот для анализа пищевой ценности
 - Система логирования
 - Обработка ошибок
 
-Структура проекта:
 
-foodlens/
-├── app/
-│ ├── bot.py # Главный запуск бота
-│ ├── handlers/ # Обработчики сообщений
-│ │ ├── init.py # Объединение роутеров
-│ │ ├── basic_commands.py # Базовые команды
-│ │ └── photo_handler.py # Обработка фото
-│ └── locales/ # Система локализации
-│ ├── init.py # Интерфейс для текстов
-│ ├── base.py # Базовые классы
-│ └── ru/texts.py # Русские тексты
-├── .env # Настройки окружения
-├── requirements.txt # Зависимости
-└── Makefile # Утилиты разработки
 
 🏗️ АРХИТЕКТУРА ПРОЕКТА
 
 foodlens/
 ├── app/
-│   ├── __init__.py
-│   ├── bot.py                      # 🚀 Главный запуск бота
-│   ├── handlers/                   # 🎯 Обработчики сообщений
-│   │   ├── __init__.py             # Объединение роутеров
-│   │   ├── basic_commands.py       # Команды (/start, /help и т.д.)
-│   │   └── photo_handler.py        # Обработка фото
-│   └── locales/                    # 🌍 Локализация
-│       ├── __init__.py             # Интерфейс для текстов
-│       ├── base.py                 # Базовые классы
-│       └── ru/texts.py             # Русские тексты
-├── .env                            # ⚙️ Настройки
-├── requirements.txt                # 📦 Зависимости
-└── Makefile                        # 🔧 Утилиты
+│   ├── handlers/           # Обработчики сообщений
+│   │   ├── basic_commands.py
+│   │   └── photo_handler.py
+│   ├── locales/           # Система локализации
+│   │   └── ru/
+│   │       └── texts.py
+│   ├── services/          # Бизнес-логика
+│   │   └── gpt_analyzer.py
+│   ├── prompts/           # Промты для GPT
+│   │   └── food_analysis.py
+│   ├── keyboards/         # Клавиатуры
+│   │   ├── main_menu.py
+│   │   └── analysis_menu.py
+│   ├── core/             # Ядро системы
+│   │   └── i18n.py
+│   └── bot.py
+├── .env
+├── requirements.txt
+└── Makefile
 
 ### 2. Ключевые правила:
 - Все тексты бота в `app/locales/ru/texts.py`
