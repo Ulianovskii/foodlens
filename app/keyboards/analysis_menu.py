@@ -11,7 +11,6 @@ def get_analysis_menu_keyboard(refinements_left: int = 3):
     builder.add(
         KeyboardButton(text=i18n.get_button_text("nutrition")),
         KeyboardButton(text=i18n.get_button_text("recipe")),
-        KeyboardButton(text=i18n.get_button_text("refine") + f" ({refinements_left})"),
         KeyboardButton(text=i18n.get_button_text("new_photo")),
         KeyboardButton(text=i18n.get_button_text("cancel"))
     )

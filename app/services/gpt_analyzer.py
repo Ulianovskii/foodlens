@@ -13,22 +13,45 @@ logger = logging.getLogger(__name__)
 class GPTAnalyzer:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        self.user_sessions = {}  # Храним только сессии, НЕ фото
+        self.user_sessions = {}
     
-    async def analyze_food_image(self, user_id: int, image_file, user_description: str = None, analysis_type: str = "nutrition", user_message: str = None) -> dict:
-        """Анализирует фото или продолжает диалог в контексте"""
+    async def analyze_food_image(self, user_id: int, image_file, analysis_type: str = "nutrition", user_message: str = None) -> dict:
         try:
+            print(f"🔍 DEBUG: Начало анализа, user_id: {user_id}")
+            print(f"🔍 DEBUG: Тип image_file: {type(image_file)}")
+            print(f"🔍 DEBUG: analysis_type: {analysis_type}")
+            
+            MAX_MESSAGES = 5
+            
             # Если это первый запрос - конвертируем фото в base64
             if image_file and user_id not in self.user_sessions:
-                # Перематываем файл в начало
-                image_file.seek(0)
-                image_data = image_file.read()
-                base64_image = base64.b64encode(image_data).decode('utf-8')
+                print("🔍 DEBUG: Первый запрос с фото")
+                
+                # Проверим что файл можно читать
+                try:
+                    if hasattr(image_file, 'getvalue'):  # Если это BytesIO
+                        image_data = image_file.getvalue()
+                    else:  # Если это обычный файл
+                        image_file.seek(0)
+                        image_data = image_file.read()
+                    
+                    print(f"🔍 DEBUG: Размер фото: {len(image_data)} байт")
+                    
+                    if len(image_data) == 0:
+                        print("❌ DEBUG: Файл пустой!")
+                        return None
+                        
+                    base64_image = base64.b64encode(image_data).decode('utf-8')
+                    print(f"🔍 DEBUG: Base64 успешно создан, размер: {len(base64_image)} символов")
+                    
+                except Exception as e:
+                    print(f"❌ DEBUG: Ошибка чтения файла: {e}")
+                    return None
                 
                 messages = [
                     {
                         "role": "system", 
-                        "content": get_system_prompt(user_description, analysis_type)
+                        "content": get_system_prompt(None, analysis_type)
                     },
                     {
                         "role": "user",
@@ -45,49 +68,52 @@ class GPTAnalyzer:
                 self.user_sessions[user_id] = {
                     "messages": messages,
                     "last_activity": time.time(),
-                    "refinements_used": 0
+                    "messages_count": 1
                 }
                 
             elif user_id in self.user_sessions:
-                # Продолжаем существующую сессию
                 session = self.user_sessions[user_id]
+                if session["messages_count"] >= MAX_MESSAGES:
+                    return {"error": "message_limit_reached"}
                 
-                if user_message:  # Уточнение
+                if user_message:
                     session["messages"].append({"role": "user", "content": user_message})
-                    session["refinements_used"] += 1
-                else:  # Смена типа анализа
-                    session["messages"][0]["content"] = get_system_prompt(user_description, analysis_type)
+                    session["messages_count"] += 1
+                else:
+                    session["messages"][0]["content"] = get_system_prompt(None, analysis_type)
                     session["messages"].append({"role": "user", "content": f"Проанализируй {analysis_type}:"})
+                    session["messages_count"] += 1
             
             else:
-                return {"error": "Сессия не найдена"}
+                return {"error": "session_not_found"}
             
-            # Обновляем время и делаем запрос
             self.user_sessions[user_id]["last_activity"] = time.time()
             
+            print("🔍 DEBUG: Отправляем запрос в OpenAI...")
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=self.user_sessions[user_id]["messages"],
-                max_tokens=1000
+                max_tokens=1200
             )
             
             gpt_response = response.choices[0].message.content
             self.user_sessions[user_id]["messages"].append({"role": "assistant", "content": gpt_response})
             
-            refinements_left = 3 - self.user_sessions[user_id]["refinements_used"]
+            messages_left = MAX_MESSAGES - self.user_sessions[user_id]["messages_count"]
+            
+            print(f"🔍 DEBUG: Анализ завершен успешно!")
             
             return {
                 "analysis": gpt_response,
-                "refinements_left": max(0, refinements_left),
-                "analysis_type": analysis_type
+                "analysis_type": analysis_type,
+                "messages_left": messages_left
             }
             
         except Exception as e:
-            logger.error(f"Ошибка анализа: {e}")
+            logger.error(f"Ошибка анализа: {e}", exc_info=True)
             return None
     
     def cleanup_sessions(self):
-        """Очищает сессии старше 1 часа"""
         current_time = time.time()
         expired_users = [
             user_id for user_id, session in self.user_sessions.items()
@@ -97,5 +123,4 @@ class GPTAnalyzer:
             del self.user_sessions[user_id]
     
     def has_active_session(self, user_id: int) -> bool:
-        """Проверяет есть ли активная сессия"""
         return user_id in self.user_sessions

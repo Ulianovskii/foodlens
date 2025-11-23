@@ -82,11 +82,8 @@ async def handle_active_session_text(message: Message, state: FSMContext):
         await handle_new_photo(message, state)
     elif user_text == i18n.get_button_text("cancel"):
         await handle_cancel(message, state)
-    elif user_text.startswith(i18n.get_button_text("refine")):
-        # Просто игнорируем - уточнения работают через обычный текст
-        await message.answer(i18n.get_text("just_type_clarification"))
     else:
-        # ЛЮБОЙ другой текст - отправляем как уточнение/вопрос
+        # ЛЮБОЙ другой текст - отправляем как уточнение/вопрос к текущему фото
         await process_analysis_request(message, state, "refinement", user_message=user_text)
 
 # ===== ОБРАБОТКА КНОПОК =====
@@ -141,33 +138,47 @@ async def process_analysis_request(message: Message, state: FSMContext, analysis
         analysis_result = await gpt_analyzer.analyze_food_image(
             user_id=message.from_user.id,
             image_file=image_file,
-            user_description=None,
             analysis_type=analysis_type,
             user_message=user_message
-        )
+        )  # ⚠️ ЗАКРЫВАЕМ СКОБКУ И УБИРАЕМ ЛИШНИЙ КОД
         
-        if analysis_result and analysis_result.get("analysis"):
-            # Показываем результат
-            await wait_msg.edit_text(analysis_result["analysis"])
-            
-            # Показываем клавиатуру с обновленным счетчиком уточнений
-            refinements_left = analysis_result.get("refinements_left", 3)
-            
-            if refinements_left > 0:
-                await message.answer(
-                    i18n.get_text("refinements_left", count=refinements_left),
-                    reply_markup=get_analysis_menu_keyboard(refinements_left)
-                )
-            else:
-                await message.answer(
-                    i18n.get_text("no_refinements_left"),
-                    reply_markup=get_analysis_menu_keyboard(0)
-                )
-                
-        else:
+        # 🔧 ПРОВЕРКА РЕЗУЛЬТАТА
+        if analysis_result is None:
             await wait_msg.edit_text(i18n.get_text("analysis_failed"))
             await message.answer(
-                i18n.get_text("analysis_error"),
+                "Попробуйте еще раз",
+                reply_markup=get_main_menu_keyboard()
+            )
+            await state.clear()
+            return
+            
+        if analysis_result.get("error"):
+            if analysis_result.get("error") == "message_limit_reached":
+                await wait_msg.edit_text(i18n.get_text("message_limit_reached"))
+                await message.answer(
+                    i18n.get_text("send_photo_for_analysis"),
+                    reply_markup=get_main_menu_keyboard()
+                )
+                await state.clear()
+                return
+            else:
+                await wait_msg.edit_text(i18n.get_text("analysis_failed"))
+                await state.clear()
+                return
+        
+        # Показываем результат
+        await wait_msg.edit_text(analysis_result["analysis"])
+        
+        # Показываем сколько сообщений осталось
+        messages_left = analysis_result.get("messages_left", 5)
+        if messages_left > 0:
+            await message.answer(
+                i18n.get_text("messages_left", count=messages_left),
+                reply_markup=get_analysis_menu_keyboard()
+            )
+        else:
+            await message.answer(
+                i18n.get_text("message_limit_reached"),
                 reply_markup=get_main_menu_keyboard()
             )
             await state.clear()
