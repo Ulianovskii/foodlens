@@ -6,91 +6,176 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.services.gpt_analyzer import GPTAnalyzer
 from app.core.i18n import get_localization
+from app.keyboards.main_menu import get_main_menu_keyboard
+from app.keyboards.analysis_menu import get_analysis_menu_keyboard
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
-# СОЗДАЕМ НОВЫЙ РОУТЕР с уникальным именем
-food_photo_router = Router()  # ИЗМЕНИЛИ ИМЯ
+food_photo_router = Router()
 gpt_analyzer = GPTAnalyzer()
 
 class PhotoAnalysis(StatesGroup):
     waiting_for_photo = State()
-    waiting_for_description = State()
+    active_session = State()  # Новое состояние - активная сессия
 
-@food_photo_router.message(Command("analyze"))  # ИЗМЕНИЛИ
+# ===== ОСНОВНОЕ МЕНЮ =====
+@food_photo_router.message(F.text == "📸 Анализировать еду")
+@food_photo_router.message(Command("analyze"))
 async def cmd_analyze(message: Message, state: FSMContext):
-    """Обработчик команды /analyze"""
+    """Обработчик команды /analyze или кнопки анализа"""
     i18n = get_localization()
-    await message.answer(i18n.get_text("send_photo_for_analysis"))
+    
+    # Очищаем старые сессии
+    gpt_analyzer.cleanup_sessions()
+    
+    await message.answer(
+        i18n.get_text("send_photo_for_analysis"),
+        reply_markup=ReplyKeyboardRemove()
+    )
     await state.set_state(PhotoAnalysis.waiting_for_photo)
 
-@food_photo_router.message(PhotoAnalysis.waiting_for_photo, F.photo)  # ИЗМЕНИЛИ
-async def handle_photo_with_state(message: Message, state: FSMContext):
-    """Обрабатывает фото в состоянии анализа"""
+# ===== ЗАГРУЗКА ФОТО =====
+@food_photo_router.message(PhotoAnalysis.waiting_for_photo, F.photo)
+async def handle_photo(message: Message, state: FSMContext):
+    """Обрабатывает загрузку фото"""
     try:
         i18n = get_localization()
         
-        # Сохраняем фото
+        # Получаем фото (самое качественное)
         photo = message.photo[-1]
         file = await message.bot.get_file(photo.file_id)
-        file_path = f"temp_{message.from_user.id}.jpg"
-        await message.bot.download_file(file.file_path, file_path)
+        image_file = await message.bot.download_file(file.file_path)
         
-        await state.update_data(photo_path=file_path)
-        await message.answer(i18n.get_text("add_description"))
-        await state.set_state(PhotoAnalysis.waiting_for_description)
+        # Сохраняем file object в состоянии
+        await state.update_data(image_file=image_file)
+        
+        # СРАЗУ переходим к активной сессии
+        await message.answer(
+            i18n.get_text("photo_received_options"),
+            reply_markup=get_analysis_menu_keyboard()
+        )
+        await state.set_state(PhotoAnalysis.active_session)
         
     except Exception as e:
-        logger.error(f"Ошибка обработки фото: {e}")
-        await message.reply(i18n.get_text("analysis_error"))
+        logger.error(f"Ошибка загрузки фото: {e}")
+        await message.answer(
+            i18n.get_text("analysis_error"),
+            reply_markup=get_main_menu_keyboard()
+        )
         await state.clear()
 
-@food_photo_router.message(PhotoAnalysis.waiting_for_description)  # ИЗМЕНИЛИ
-async def handle_description(message: Message, state: FSMContext):
-    """Обрабатывает описание от пользователя"""
+# ===== АКТИВНАЯ СЕССИЯ - обработка ВСЕХ сообщений =====
+@food_photo_router.message(PhotoAnalysis.active_session, F.text)
+async def handle_active_session_text(message: Message, state: FSMContext):
+    """Обрабатывает ЛЮБОЙ текст в активной сессии"""
+    i18n = get_localization()
+    
+    user_text = message.text
+    
+    # Обработка кнопок
+    if user_text == i18n.get_button_text("nutrition"):
+        await process_analysis_request(message, state, "nutrition")
+    elif user_text == i18n.get_button_text("recipe"):
+        await process_analysis_request(message, state, "recipe")
+    elif user_text == i18n.get_button_text("new_photo"):
+        await handle_new_photo(message, state)
+    elif user_text == i18n.get_button_text("cancel"):
+        await handle_cancel(message, state)
+    elif user_text.startswith(i18n.get_button_text("refine")):
+        # Просто игнорируем - уточнения работают через обычный текст
+        await message.answer(i18n.get_text("just_type_clarification"))
+    else:
+        # ЛЮБОЙ другой текст - отправляем как уточнение/вопрос
+        await process_analysis_request(message, state, "refinement", user_message=user_text)
+
+# ===== ОБРАБОТКА КНОПОК =====
+async def handle_new_photo(message: Message, state: FSMContext):
+    """Обрабатывает запрос нового фото"""
+    i18n = get_localization()
+    
+    # Очищаем сессию GPT
+    if message.from_user.id in gpt_analyzer.user_sessions:
+        del gpt_analyzer.user_sessions[message.from_user.id]
+    
+    await message.answer(
+        i18n.get_text("send_photo_for_analysis"),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(PhotoAnalysis.waiting_for_photo)
+
+async def handle_cancel(message: Message, state: FSMContext):
+    """Обрабатывает отмену"""
+    i18n = get_localization()
+    
+    # Очищаем сессию GPT
+    if message.from_user.id in gpt_analyzer.user_sessions:
+        del gpt_analyzer.user_sessions[message.from_user.id]
+    
+    await message.answer(
+        i18n.get_text("cancel_success"),
+        reply_markup=get_main_menu_keyboard()
+    )
+    await state.clear()
+
+# ===== ОБРАБОТКА ФОТО БЕЗ КОМАНДЫ =====
+@food_photo_router.message(F.photo)
+async def handle_photo_direct(message: Message, state: FSMContext):
+    """Обрабатывает фото отправленное без команды"""
+    await handle_photo(message, state)
+
+# ===== ОСНОВНАЯ ФУНКЦИЯ АНАЛИЗА =====
+async def process_analysis_request(message: Message, state: FSMContext, analysis_type: str, user_message: str = None):
+    """Общая функция для обработки всех типов анализа"""
     try:
         i18n = get_localization()
         user_data = await state.get_data()
-        photo_path = user_data.get('photo_path')
         
-        if not photo_path:
-            await message.reply("❌ Ошибка: фото не найдено")
-            await state.clear()
-            return
+        # Для первого запроса нужен файл фото
+        image_file = user_data.get('image_file') if analysis_type != "refinement" else None
         
-        user_description = None
-        if message.text and message.text.lower() not in ['нет', 'no', 'skip']:
-            user_description = message.text
+        # Отправляем сообщение о начале анализа
+        wait_msg = await message.answer(i18n.get_text("analyzing_image"))
         
-        # Отправляем анализ
-        wait_msg = await message.reply(i18n.get_text("analyzing_image"))
-        
-        # Анализируем фото через GPT с описанием
+        # Анализируем через GPT
         analysis_result = await gpt_analyzer.analyze_food_image(
-            photo_path, 
-            user_description
+            user_id=message.from_user.id,
+            image_file=image_file,
+            user_description=None,
+            analysis_type=analysis_type,
+            user_message=user_message
         )
         
-        # Удаляем временный файл
-        if os.path.exists(photo_path):
-            os.remove(photo_path)
-        
-        if analysis_result:
+        if analysis_result and analysis_result.get("analysis"):
+            # Показываем результат
             await wait_msg.edit_text(analysis_result["analysis"])
+            
+            # Показываем клавиатуру с обновленным счетчиком уточнений
+            refinements_left = analysis_result.get("refinements_left", 3)
+            
+            if refinements_left > 0:
+                await message.answer(
+                    i18n.get_text("refinements_left", count=refinements_left),
+                    reply_markup=get_analysis_menu_keyboard(refinements_left)
+                )
+            else:
+                await message.answer(
+                    i18n.get_text("no_refinements_left"),
+                    reply_markup=get_analysis_menu_keyboard(0)
+                )
+                
         else:
             await wait_msg.edit_text(i18n.get_text("analysis_failed"))
+            await message.answer(
+                i18n.get_text("analysis_error"),
+                reply_markup=get_main_menu_keyboard()
+            )
+            await state.clear()
             
-        await state.clear()
-        
     except Exception as e:
         logger.error(f"Ошибка анализа: {e}")
-        await message.reply(i18n.get_text("analysis_error"))
+        await message.answer(
+            i18n.get_text("analysis_error"),
+            reply_markup=get_main_menu_keyboard()
+        )
         await state.clear()
-
-# Обработчик фото вне состояния (прямая отправка)
-@food_photo_router.message(F.photo)  # ИЗМЕНИЛИ
-async def handle_photo_direct(message: Message, state: FSMContext):
-    """Обрабатывает фото отправленное без команды /analyze"""
-    await handle_photo_with_state(message, state)
