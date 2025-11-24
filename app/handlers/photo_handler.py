@@ -1,336 +1,118 @@
-# app/handlers/photo_handler.py
-from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardRemove
-from aiogram.filters import Command, StateFilter
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from app.services.gpt_analyzer import GPTAnalyzer
-from app.core.i18n import get_localization
-from app.keyboards.main_menu import get_main_menu_keyboard
-from app.keyboards.analysis_menu import get_analysis_menu_keyboard
+# app/bot.py
+import os
 import logging
+import asyncio
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
-logger = logging.getLogger(__name__)
+from app.handlers import router  # ← здесь уже включены ВСЕ роутеры (включая админ)
+from app.locales.base import localization_manager
+from app.database import Database
+from app.services import UserService
 
-router = Router()
-gpt_analyzer = GPTAnalyzer()
+# Импорты для middleware
+from app.middlewares.limit_middleware import LimitMiddleware
+from app.middlewares.state_middleware import StateValidationMiddleware
 
-class PhotoAnalysis(StatesGroup):
-    waiting_for_photo = State()
-    active_session = State()
-    analysis_done = State()
 
-# Импортируем состояние промокодов
-from app.handlers.promo_handlers import PromoStates
-
-# ===== ОСНОВНОЕ МЕНЮ =====
-@router.message(F.text == get_localization().get_button_text('analyze_food'))
-@router.message(Command("analyze"))
-async def cmd_analyze(message: Message, state: FSMContext):
-    """Обработчик команды /analyze или кнопки анализа"""
-    i18n = get_localization()
-    
-    gpt_analyzer.cleanup_sessions()
-    
-    await message.answer(
-        i18n.get_text("send_photo_for_analysis"),
-        reply_markup=ReplyKeyboardRemove()
+def setup_logging():
+    """Настройка логирования"""
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
-    await state.set_state(PhotoAnalysis.waiting_for_photo)
+    return logging.getLogger(__name__)
 
-# ===== ЗАГРУЗКА ФОТО =====
-@router.message(PhotoAnalysis.waiting_for_photo, F.photo)
-async def handle_photo_with_caption(message: Message, state: FSMContext):
-    """Обрабатывает загрузку фото с подписью или без"""
-    try:
-        i18n = get_localization()
-        
-        user_id = message.from_user.id
-        if user_id in gpt_analyzer.user_sessions:
-            del gpt_analyzer.user_sessions[user_id]
-            print(f"🔍 DEBUG: Очищена старая сессия GPT для пользователя {user_id}")
-        
-        photo = message.photo[-1]
-        file = await message.bot.get_file(photo.file_id)
-        image_file = await message.bot.download_file(file.file_path)
-        
-        caption = message.caption
-        
-        await state.update_data(
-            image_file=image_file,
-            user_messages=[caption] if caption else []
-        )
-        
-        await message.answer(
-            i18n.get_text("photo_received_options"),
-            reply_markup=get_analysis_menu_keyboard()
-        )
-        await state.set_state(PhotoAnalysis.active_session)
-        
-    except Exception as e:
-        logger.error(f"Ошибка загрузки фото: {e}")
-        await message.answer(
-            i18n.get_text("analysis_error"),
-            reply_markup=get_main_menu_keyboard()
-        )
-        await state.clear()
 
-# ===== АКТИВНАЯ СЕССИЯ =====
-@router.message(PhotoAnalysis.active_session, F.text)
-async def handle_active_session_text(message: Message, state: FSMContext):
-    """Обрабатывает текст в активной сессии"""
-    i18n = get_localization()
-    
-    user_text = message.text
-    user_data = await state.get_data()
-    
-    if user_text == i18n.get_button_text("nutrition"):
-        await process_analysis_request(message, state, "nutrition")
-    elif user_text == i18n.get_button_text("recipe"):
-        await process_analysis_request(message, state, "recipe")
-    elif user_text == i18n.get_button_text("new_photo"):
-        await handle_new_photo(message, state)
-    elif user_text == i18n.get_button_text("cancel"):
-        await handle_menu(message, state)
-    else:
-        current_messages = user_data.get('user_messages', [])
-        current_messages.append(user_text)
-        
-        await state.update_data(user_messages=current_messages)
-        
-        messages_count = len(current_messages)
-        if messages_count == 3:
-            await message.answer(i18n.get_text('refinement_hint'))
+def setup_localization():
+    """Настройка локализации"""
+    default_lang = os.getenv('DEFAULT_LANGUAGE', 'ru')
+    localization_manager.default_lang = default_lang
+    logging.getLogger(__name__).info(f"Локализация установлена: {default_lang}")
 
-# ===== СЕССИЯ ПОСЛЕ АНАЛИЗА =====
-@router.message(PhotoAnalysis.analysis_done, F.text)
-async def handle_after_analysis_text(message: Message, state: FSMContext):
-    """Обрабатывает текстовые сообщения ПОСЛЕ анализа"""
-    i18n = get_localization()
-    
-    user_text = message.text
-    
-    if user_text == i18n.get_button_text("nutrition"):
-        await process_analysis_request(message, state, "nutrition")
-    elif user_text == i18n.get_button_text("recipe"):
-        await process_analysis_request(message, state, "recipe")
-    elif user_text == i18n.get_button_text("new_photo"):
-        await handle_new_photo(message, state)
-    elif user_text == i18n.get_button_text("cancel"):
-        await handle_menu(message, state)
-    else:
-        await process_refinement_request(message, state, user_text)
 
-# ===== ОБРАБОТКА КНОПОК =====
-async def handle_new_photo(message: Message, state: FSMContext):
-    """Обрабатывает запрос нового фото"""
-    i18n = get_localization()
+async def main():
+    """Основная функция для запуска бота"""
+    # Загружаем переменные окружения
+    load_dotenv()
     
-    user_id = message.from_user.id
-    if user_id in gpt_analyzer.user_sessions:
-        del gpt_analyzer.user_sessions[user_id]
-        print(f"🔍 DEBUG: Очищена сессия GPT для пользователя {user_id}")
+    # Настраиваем логирование
+    logger = setup_logging()
     
-    await message.answer(
-        i18n.get_text("send_photo_for_analysis"),
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await state.set_state(PhotoAnalysis.waiting_for_photo)
-
-async def handle_menu(message: Message, state: FSMContext):
-    """Обрабатывает возврат в главное меню"""
-    i18n = get_localization()
+    # Настраиваем локализацию
+    setup_localization()
     
-    user_id = message.from_user.id
-    if user_id in gpt_analyzer.user_sessions:
-        del gpt_analyzer.user_sessions[user_id]
-    
-    await message.answer(
-        i18n.get_text("cancel_success"),
-        reply_markup=get_main_menu_keyboard()
-    )
-    await state.clear()
-
-# ===== ОБРАБОТКА ФОТО БЕЗ КОМАНДЫ =====
-@router.message(F.photo)
-async def handle_photo_direct(message: Message, state: FSMContext):
-    """Обрабатывает фото отправленное без команды"""
-    user_id = message.from_user.id
-    
-    # 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Всегда сбрасываем состояние при новом фото
-    current_state = await state.get_state()
-    
-    # Если пользователь уже был в состоянии analysis_done (после анализа)
-    # и отправляет новое фото - полностью сбрасываем сессию
-    if current_state == PhotoAnalysis.analysis_done.state:
-        if user_id in gpt_analyzer.user_sessions:
-            del gpt_analyzer.user_sessions[user_id]
-            print(f"🔍 DEBUG: Полный сброс сессии GPT для пользователя {user_id} (новое фото после анализа)")
-        
-        # Сбрасываем состояние к началу
-        await state.set_state(PhotoAnalysis.waiting_for_photo)
-    
-    # Обычная очистка сессии
-    elif user_id in gpt_analyzer.user_sessions:
-        del gpt_analyzer.user_sessions[user_id]
-        print(f"🔍 DEBUG: Очищена старая сессия GPT для пользователя {user_id}")
-    
-    await handle_photo_with_caption(message, state)
-
-# ===== ТЕКСТ БЕЗ СЕССИИ =====
-@router.message(
-    F.text,
-    ~StateFilter(PhotoAnalysis.active_session),
-    ~StateFilter(PhotoAnalysis.analysis_done)
-    # УБРАЛ: ~StateFilter(PromoStates.waiting_for_promo) - больше не нужно
-)
-async def handle_text_without_session(message: Message, state: FSMContext):
-    """Обрабатывает текстовые сообщения без активной сессии"""
-    i18n = get_localization()
-    
-    user_text = message.text
-    
-    main_menu_buttons = [
-        i18n.get_button_text('analyze_food'),
-        i18n.get_button_text('help'),
-        i18n.get_button_text('history'),
-        i18n.get_button_text('profile')
-    ]
-    
-    if user_text in main_menu_buttons or user_text.startswith('/'):
+    # Проверяем наличие токена
+    bot_token = os.getenv('BOT_TOKEN')
+    if not bot_token:
+        logger.error("BOT_TOKEN не найден в .env файле!")
         return
     
-    await message.answer(
-        i18n.get_text('photo_first_then_text'),
-        reply_markup=get_main_menu_keyboard()
-    )
-
-# ===== ОСНОВНАЯ ФУНКЦИЯ АНАЛИЗА =====
-async def process_analysis_request(message: Message, state: FSMContext, analysis_type: str):
-    """Общая функция для обработки анализа"""
+    logger.info(f"Токен бота: {bot_token[:10]}...")
+    
+    # Инициализация БД и сервисов
     try:
-        i18n = get_localization()
-        user_data = await state.get_data()
+        database = Database(os.getenv('DATABASE_URL'))
+        await database.init_db()
+        logger.info("✅ База данных инициализирована")
         
-        image_file = user_data.get('image_file')
-        user_messages = user_data.get('user_messages', [])
+        user_service = UserService(database)
+        logger.info("✅ Сервисы инициализированы")
         
-        if not image_file:
-            await message.answer(
-                i18n.get_text('photo_not_found'),
-                reply_markup=get_main_menu_keyboard()
-            )
-            await state.clear()
-            return
-        
-        combined_message = None
-        if user_messages:
-            combined_message = "\n".join(user_messages)
-            print(f"🔍 DEBUG: Объединенные сообщения: {combined_message}")
-        
-        wait_msg = await message.answer(i18n.get_text("analyzing_image"))
-        
-        analysis_result = await gpt_analyzer.analyze_food_image(
-            user_id=message.from_user.id,
-            image_file=image_file,
-            analysis_type=analysis_type,
-            user_message=combined_message
-        )
-        
-        if analysis_result is None:
-            await wait_msg.edit_text(i18n.get_text("analysis_failed"))
-            await message.answer(
-                i18n.get_text('try_again'),
-                reply_markup=get_main_menu_keyboard()
-            )
-            await state.clear()
-            return
-            
-        if analysis_result.get("error"):
-            if analysis_result.get("error") == "message_limit_reached":
-                await wait_msg.edit_text(i18n.get_text("message_limit_reached"))
-                await message.answer(
-                    i18n.get_text("send_photo_for_analysis"),
-                    reply_markup=get_main_menu_keyboard()
-                )
-                await state.clear()
-                return
-            else:
-                await wait_msg.edit_text(i18n.get_text("analysis_failed"))
-                await state.clear()
-                return
-        
-        await wait_msg.edit_text(analysis_result["analysis"])
-        await state.set_state(PhotoAnalysis.analysis_done)
-        await state.update_data(user_messages=[])
-        
-        messages_left = analysis_result.get("messages_left", 5)
-        await message.answer(
-            i18n.get_text("messages_left", count=messages_left),
-            reply_markup=get_analysis_menu_keyboard()
-        )
-            
     except Exception as e:
-        logger.error(f"Ошибка анализа: {e}")
-        await message.answer(
-            i18n.get_text("analysis_error"),
-            reply_markup=get_main_menu_keyboard()
-        )
-        await state.clear()
-
-# ===== ФУНКЦИЯ ДЛЯ УТОЧНЕНИЙ =====
-async def process_refinement_request(message: Message, state: FSMContext, user_message: str):
-    """Обрабатывает уточнения после анализа"""
+        logger.error(f"❌ Ошибка инициализации БД: {e}")
+        return
+    
+    # Инициализация бота и диспетчера
     try:
-        i18n = get_localization()
+        bot = Bot(token=bot_token)
+        bot.user_service = user_service
+        logger.info("Бот инициализирован")
         
-        wait_msg = await message.answer(i18n.get_text("analyzing_image"))
+        storage = MemoryStorage()
         
-        analysis_type = "nutrition"
+        # Создаем диспетчер
+        dp = Dispatcher(storage=storage)
+        logger.info("Диспетчер инициализирован")
         
-        analysis_result = await gpt_analyzer.analyze_food_image(
-            user_id=message.from_user.id,
-            image_file=None,
-            analysis_type=analysis_type,
-            user_message=user_message
-        )
+        # ===== РЕГИСТРИРУЕМ MIDDLEWARE ТОЛЬКО ДЛЯ ФОТО РОУТЕРА =====
+        from app.handlers.photo_handler import router as photo_router
+        photo_router.message.middleware(LimitMiddleware())
+        logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
-        if analysis_result is None:
-            await wait_msg.edit_text(i18n.get_text("analysis_failed"))
-            return
-            
-        if analysis_result.get("error"):
-            if analysis_result.get("error") == "message_limit_reached":
-                await wait_msg.edit_text(i18n.get_text("message_limit_reached"))
-                await message.answer(
-                    i18n.get_text("send_photo_for_analysis"),
-                    reply_markup=get_main_menu_keyboard()
-                )
-                await state.clear()
-                return
-            else:
-                await wait_msg.edit_text(i18n.get_text("analysis_failed"))
-                await state.clear()
-                return
+        # ===== РЕГИСТРИРУЕМ STATE MIDDLEWARE ДЛЯ ВСЕХ СООБЩЕНИЙ =====
+        dp.message.middleware(StateValidationMiddleware())
+        logger.info("✅ StateValidationMiddleware подключен ко всем сообщениям")
         
-        await wait_msg.edit_text(analysis_result["analysis"])
+        # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
+        dp.include_router(router)  # ← ТОЛЬКО ОДИН РОУТЕР, в нем уже все включено
+        logger.info("✅ Все роутеры зарегистрированы")
+
+        # ДОБАВЬ ЭТУ ПРОВЕРКУ ПЕРЕД запуском polling
+        from app.handlers.admin_handlers import ADMIN_IDS
+        print(f"🔧 DEBUG: ADMIN_IDS из admin_handlers: {ADMIN_IDS}")
+    
+
+        # Получаем информацию о боте
+        bot_info = await bot.get_me()
+        logger.info(f"Бот запущен: @{bot_info.username} ({bot_info.first_name})")
         
-        messages_left = analysis_result.get("messages_left", 5)
-        if messages_left > 0:
-            await message.answer(
-                i18n.get_text("messages_left", count=messages_left),
-                reply_markup=get_analysis_menu_keyboard()
-            )
-        else:
-            await message.answer(
-                i18n.get_text("message_limit_reached"),
-                reply_markup=get_main_menu_keyboard()
-            )
-            await state.clear()
-            
+        # Запуск опроса
+        logger.info("Начинаем опрос...")
+        await dp.start_polling(bot)
+
+        
+        
     except Exception as e:
-        logger.error(f"Ошибка уточнения: {e}")
-        await message.answer(
-            i18n.get_text("analysis_error"),
-            reply_markup=get_main_menu_keyboard()
-        )
+        logger.error(f"Ошибка при запуске бота: {e}")
+        raise
+    finally:
+        if 'bot' in locals():
+            await bot.session.close()
+            logger.info("Сессия бота закрыта")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

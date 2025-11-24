@@ -13,6 +13,7 @@ from app.services import UserService
 
 # Импорты для middleware
 from app.middlewares.limit_middleware import LimitMiddleware
+from app.middlewares.state_middleware import StateValidationMiddleware
 
 
 def setup_logging():
@@ -85,6 +86,8 @@ async def main():
         # УБИРАЕМ dp.include_router(admin_router) - он уже в основном роутере
         dp.include_router(router)  # ← ТОЛЬКО ОДИН РОУТЕР, в нем уже все включено
         logger.info("✅ Все роутеры зарегистрированы")
+
+        router.message.middleware(StateValidationMiddleware())
 
         # ДОБАВЬ ЭТУ ПРОВЕРКУ ПЕРЕД запуском polling
         from app.handlers.admin_handlers import ADMIN_IDS

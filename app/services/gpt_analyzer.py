@@ -152,3 +152,9 @@ class GPTAnalyzer:
     
     def has_active_session(self, user_id: int) -> bool:
         return user_id in self.user_sessions
+    
+    def end_session(self, user_id: int):
+        """Завершает сессию анализа для пользователя"""
+        if user_id in self.user_sessions:
+            del self.user_sessions[user_id]
+            print(f"🔍 DEBUG: Сессия завершена для user_id: {user_id}")

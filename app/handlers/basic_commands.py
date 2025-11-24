@@ -5,7 +5,7 @@ from aiogram.types import Message, CallbackQuery
 from app.services.user_service import UserService
 from app.core.i18n import get_localization
 from app.keyboards.main_menu import get_main_menu_keyboard
-from app.keyboards.inline_menus import get_profile_keyboard  
+#from app.keyboards.inline_menus import get_profile_keyboard  
 from app.keyboards.promo_keyboards import get_premium_menu_keyboard
 from datetime import datetime, date  # ← ВЫНЕС ИМПОРТ В НАЧАЛО
 

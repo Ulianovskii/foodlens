@@ -232,8 +232,8 @@ async def admin_panel(message: Message):
         reply_markup=get_admin_panel_keyboard()
     )
 
-@router.callback_query(F.data.startswith("admin_"))
-@admin_callback_required
+#@router.callback_query(F.data.startswith("admin_"))
+#@admin_callback_required
 async def admin_actions(callback: CallbackQuery):
     """Обработка действий из админ-панели"""
     i18n = get_localization()
