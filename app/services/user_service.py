@@ -1,4 +1,3 @@
-# app/services/user_service.py - ИСПРАВЛЕННЫЙ
 from app.models.user import User
 from datetime import datetime, date
 import logging
@@ -9,17 +8,28 @@ class UserService:
     def __init__(self, database):
         self.database = database
     
-    async def get_or_create_user(self, user_id: int) -> User:
+    async def get_or_create_user(self, telegram_id: int, username: str = None, 
+                               first_name: str = None, last_name: str = None) -> User:
         """Получить пользователя или создать нового"""
-        user_data = await self.database.get_user(user_id)
+        user_data = await self.database.get_user(telegram_id)
         
         if user_data:
             # Конвертируем dict в User объект
-            return User.from_dict(user_data)
+            user = User.from_dict(user_data)
+            # Обновляем данные если нужно
+            if username and user.username != username:
+                user.username = username
+                user.first_name = first_name
+                user.last_name = last_name
+                await self.save_user(user)
+            return user
         else:
             # Создаем нового пользователя
             user = User(
-                user_id=user_id,
+                user_id=telegram_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
                 created_at=datetime.now(),
                 last_reset_date=date.today()
             )
@@ -30,24 +40,21 @@ class UserService:
         """Сохраняет User объект в БД"""
         try:
             user_data = user.to_dict()
-            print(f"DEBUG: user_data type: {type(user_data)}")  # ← ДОБАВИТЬ
-            print(f"DEBUG: user_data keys: {user_data.keys() if isinstance(user_data, dict) else 'NOT DICT'}")  # ← ДОБАВИТЬ
             await self.database.save_user(user_data)
         except Exception as e:
             logger.error(f"Ошибка в save_user: {e}")
             raise
     
-    async def increment_photo_counter(self, user_id: int) -> bool:
+    async def increment_photo_counter(self, user: User) -> bool:
         """Увеличить счетчик фото и проверить лимит"""
-        user = await self.get_or_create_user(user_id)
-        
         # Проверяем нужно ли сбросить счетчики
         await self._reset_daily_counters_if_needed(user)
         
-        if not user.has_photo_quota():
+        if not user.can_analyze_photo():
             return False
             
         user.daily_photos_used += 1
+        user.total_photos_analyzed += 1
         await self.save_user(user)
         return True
     
@@ -55,6 +62,5 @@ class UserService:
         """Сбросить дневные счетчики если наступил новый день"""
         if user.last_reset_date != date.today():
             user.daily_photos_used = 0
-            user.daily_texts_used = 0
             user.last_reset_date = date.today()
             await self.save_user(user)

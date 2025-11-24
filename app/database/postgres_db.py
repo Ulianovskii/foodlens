@@ -1,5 +1,4 @@
-# app/database/postgres_db.py v1 - ИСПРАВЛЕННАЯ
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import asyncpg
 import os
 import logging
@@ -19,17 +18,15 @@ class Database:
     async def init_db(self):
         """Проверка подключения к БД и инициализация"""
         try:
+            await self._create_tables()  # Всегда создаем/проверяем таблицы
             pool = await self.get_pool()
             async with pool.acquire() as conn:
-                # Проверяем что таблица существует
                 await conn.execute("SELECT 1 FROM users LIMIT 1")
             logger.info("✅ База данных подключена и готова к работе")
         except Exception as e:
             logger.error(f"❌ Ошибка инициализации БД: {e}")
-            # Если таблицы нет - создаем (на время разработки)
-            await self._create_tables()
+            raise
     
-    # app/database/postgres_db.py - исправить метод get_user
     async def get_user(self, user_id: int) -> Optional[dict]:
         """Возвращает сырые данные пользователя как словарь"""
         pool = await self.get_pool()
@@ -40,60 +37,124 @@ class Database:
             )
             return dict(row) if row else None
     
-   # app/database/postgres_db.py - ИСПРАВЛЕННЫЙ метод save_user
     async def save_user(self, user_data: dict):
         pool = await self.get_pool()
         async with pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO users 
-                (user_id, created_at, language, subscription_type, 
-                subscription_until, daily_photos_used, daily_texts_used,
-                last_reset_date, custom_photo_limit, custom_text_limit)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                (user_id, username, first_name, last_name, created_at, language, subscription_type, 
+                subscription_until, daily_photos_used, total_photos_analyzed, last_reset_date)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (user_id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
                     language = EXCLUDED.language,
                     subscription_type = EXCLUDED.subscription_type,
                     subscription_until = EXCLUDED.subscription_until,
                     daily_photos_used = EXCLUDED.daily_photos_used,
-                    daily_texts_used = EXCLUDED.daily_texts_used,
+                    total_photos_analyzed = EXCLUDED.total_photos_analyzed,
                     last_reset_date = EXCLUDED.last_reset_date,
-                    custom_photo_limit = EXCLUDED.custom_photo_limit,
-                    custom_text_limit = EXCLUDED.custom_text_limit,
                     updated_at = NOW()
             ''', 
-                user_data['user_id'], 
+                user_data['user_id'],
+                user_data.get('username'),
+                user_data.get('first_name'),
+                user_data.get('last_name'),
                 user_data['created_at'], 
                 user_data.get('language', 'ru'),
                 user_data.get('subscription_type', 'free'), 
                 user_data.get('subscription_until'),
-                user_data.get('daily_photos_used', 0), 
-                user_data.get('daily_texts_used', 0),
-                user_data.get('last_reset_date'), 
-                user_data.get('custom_photo_limit'),
-                user_data.get('custom_text_limit')
+                user_data.get('daily_photos_used', 0),
+                user_data.get('total_photos_analyzed', 0),
+                user_data.get('last_reset_date')
             )
     
     async def _create_tables(self):
-        """Создание таблиц если их нет"""  # ← ДОБАВЛЕН ОТСТУП!
+        """Создание таблиц если их нет"""
         try:
             pool = await self.get_pool()
             async with pool.acquire() as conn:
                 await conn.execute('''
                     CREATE TABLE IF NOT EXISTS users (
                         user_id BIGINT PRIMARY KEY,
+                        username VARCHAR(100),
+                        first_name VARCHAR(100),
+                        last_name VARCHAR(100),
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         language VARCHAR(10) DEFAULT 'ru',
                         subscription_type VARCHAR(20) DEFAULT 'free',
                         subscription_until TIMESTAMP WITH TIME ZONE,
                         daily_photos_used INTEGER DEFAULT 0,
-                        daily_texts_used INTEGER DEFAULT 0,
-                        last_reset_date DATE,
-                        custom_photo_limit INTEGER,
-                        custom_text_limit INTEGER,
+                        total_photos_analyzed INTEGER DEFAULT 0,
+                        last_reset_date DATE DEFAULT CURRENT_DATE,
                         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                     )
                 ''')
-                logger.info("✅ Таблица users создана")
+                
+                # Создаем таблицу промокодов
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS promo_codes (
+                        id SERIAL PRIMARY KEY,
+                        code VARCHAR(50) UNIQUE NOT NULL,
+                        promo_type VARCHAR(20) NOT NULL,
+                        is_used BOOLEAN DEFAULT FALSE,
+                        used_by BIGINT,
+                        used_at TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        expires_at TIMESTAMP WITH TIME ZONE
+                    )
+                ''')
+                logger.info("✅ Таблицы users и promo_codes созданы/проверены")
         except Exception as e:
             logger.error(f"❌ Ошибка создания таблиц: {e}")
             raise
+
+    # МЕТОДЫ ДЛЯ ПРОМОКОДОВ - ДОБАВИТЬ ВНУТРЬ КЛАССА!
+    
+    async def save_promo_code(self, promo_data: dict):
+        """Сохранить промокод в БД"""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute('''
+                INSERT INTO promo_codes 
+                (code, promo_type, expires_at)
+                VALUES ($1, $2, $3)
+            ''', 
+                promo_data['code'],
+                promo_data['promo_type'],
+                promo_data.get('expires_at')
+            )
+
+    async def get_promo_code(self, code: str) -> Optional[dict]:
+        """Получить промокод по коду"""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                'SELECT * FROM promo_codes WHERE code = $1', 
+                code
+            )
+            return dict(row) if row else None
+
+    async def mark_promo_code_used(self, code: str, user_id: int):
+        """Пометить промокод как использованный"""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute('''
+                UPDATE promo_codes 
+                SET is_used = TRUE, used_by = $1, used_at = NOW()
+                WHERE code = $2
+            ''', user_id, code)
+
+    async def get_all_promo_codes(self) -> List[dict]:
+        """Получить все промокоды"""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch('SELECT * FROM promo_codes ORDER BY created_at DESC')
+            return [dict(row) for row in rows]
+
+    async def reset_promo_codes(self):
+        """Удалить все промокоды (для тестирования)"""
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute('DELETE FROM promo_codes')

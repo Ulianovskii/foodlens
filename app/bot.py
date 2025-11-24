@@ -1,4 +1,3 @@
-# app/bot.py - ИСПРАВЛЕННАЯ
 import os
 import logging
 import asyncio
@@ -8,8 +7,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.handlers import router
 from app.locales.base import localization_manager
-from app.database import Database  # ← ДОБАВИТЬ
-from app.services import UserService  # ← ДОБАВИТЬ
+from app.database import Database
+from app.services import UserService
+
+# Импорты для Модуля 4
+from app.middlewares.limit_middleware import LimitMiddleware
 
 
 def setup_logging():
@@ -51,10 +53,10 @@ async def main():
     # Инициализация БД и сервисов
     try:
         database = Database(os.getenv('DATABASE_URL'))
-        await database.init_db()  # ← ИНИЦИАЛИЗАЦИЯ БД
+        await database.init_db()
         logger.info("✅ База данных инициализирована")
         
-        user_service = UserService(database)  # ← СОЗДАНИЕ СЕРВИСА
+        user_service = UserService(database)
         logger.info("✅ Сервисы инициализированы")
         
     except Exception as e:
@@ -69,12 +71,17 @@ async def main():
         storage = MemoryStorage()
         
         # Создаем диспетчер и передаем сервисы
-        dp = Dispatcher(storage=storage, user_service=user_service)  # ← ПЕРЕДАЕМ СЕРВИСЫ
+        dp = Dispatcher(storage=storage, user_service=user_service)
         logger.info("Диспетчер инициализирован")
         
-        # Регистрация роутера с обработчиками
-        dp.include_router(router)
-        logger.info("Роутеры зарегистрированы")
+        # ===== ДОБАВЛЯЕМ MIDDLEWARE ДЛЯ ЛИМИТОВ =====
+        dp.update.middleware(LimitMiddleware())
+        logger.info("✅ Middleware лимитов подключен")
+        
+        # ===== РЕГИСТРАЦИЯ ВСЕХ РОУТЕРОВ =====
+        dp.include_router(router)  # Основные обработчики
+        #dp.include_router(admin_handlers.router)  # Административные команды
+        logger.info("✅ Все роутеры зарегистрированы")
 
         # Получаем информацию о боте
         bot_info = await bot.get_me()
