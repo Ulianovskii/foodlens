@@ -1,0 +1,17 @@
+# docker-compose.yml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: foodlens
+      POSTGRES_USER: foodlens_user
+      POSTGRES_PASSWORD: foodlens_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  postgres_data:

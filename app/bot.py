@@ -8,6 +8,16 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from app.handlers import router
 from app.locales.base import localization_manager
 
+async def main():
+    # Инициализация БД
+    database = Database(os.getenv('DATABASE_URL'))
+    await database.init_db()
+    
+    # Инициализация сервисов
+    user_service = UserService(database)
+    
+    # Запуск бота с зависимостями
+    await dp.start_polling(bot, user_service=user_service)
 
 def setup_logging():
     """Настройка логирования"""
