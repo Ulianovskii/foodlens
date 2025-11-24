@@ -1,7 +1,7 @@
 # app/database/postgres_db.py
+from typing import Optional, Dict, Any
 import asyncpg
-from datetime import datetime, date
-from app.models.user import User
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,19 +22,18 @@ class Database:
         # Таблицы создаются через миграции в Docker
         logger.info("База данных инициализирована")
     
-    async def get_user(self, user_id: int) -> User:
+    async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает сырые данные пользователя как словарь"""
         pool = await self.get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 'SELECT * FROM users WHERE user_id = $1', 
                 user_id
             )
-            
-            if row:
-                return self._row_to_user(row)
-            return None
+            return dict(row) if row else None
     
-    async def save_user(self, user: User):
+    async def save_user(self, user_data: Dict[str, Any]):
+        """Сохраняет данные пользователя из словаря"""
         pool = await self.get_pool()
         async with pool.acquire() as conn:
             await conn.execute('''
@@ -54,24 +53,14 @@ class Database:
                     custom_text_limit = $10,
                     updated_at = NOW()
             ''', (
-                user.user_id, user.created_at, user.language,
-                user.subscription_type, user.subscription_until,
-                user.daily_photos_used, user.daily_texts_used,
-                user.last_reset_date, user.custom_photo_limit,
-                user.custom_text_limit
+                user_data['user_id'], 
+                user_data['created_at'], 
+                user_data['language'],
+                user_data['subscription_type'], 
+                user_data['subscription_until'],
+                user_data['daily_photos_used'], 
+                user_data['daily_texts_used'],
+                user_data['last_reset_date'], 
+                user_data['custom_photo_limit'],
+                user_data['custom_text_limit']
             ))
-    
-    def _row_to_user(self, row) -> User:
-        """Конвертирует строку БД в объект User"""
-        return User(
-            user_id=row['user_id'],
-            created_at=row['created_at'],
-            language=row['language'],
-            subscription_type=row['subscription_type'],
-            subscription_until=row['subscription_until'],
-            daily_photos_used=row['daily_photos_used'],
-            daily_texts_used=row['daily_texts_used'],
-            last_reset_date=row['last_reset_date'],
-            custom_photo_limit=row['custom_photo_limit'],
-            custom_text_limit=row['custom_text_limit']
-        )
