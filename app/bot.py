@@ -10,6 +10,12 @@ from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
 
+from app.handlers.admin_handlers import admin_router
+
+# Импорты для middleware
+from app.middlewares.limit_middleware import LimitMiddleware
+from app.handlers.photo_handler import food_photo_router
+
 
 def setup_logging():
     """Настройка логирования"""
@@ -71,9 +77,16 @@ async def main():
         dp = Dispatcher(storage=storage, user_service=user_service)
         logger.info("Диспетчер инициализирован")
         
-        # Регистрируем роутеры
+        # ===== РЕГИСТРИРУЕМ MIDDLEWARE ТОЛЬКО ДЛЯ ФОТО РОУТЕРА =====
+        food_photo_router.message.middleware(LimitMiddleware())
+        logger.info("✅ Middleware лимитов подключен к фото-роутеру")
+        
+        # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
         dp.include_router(router)
         logger.info("✅ Все роутеры зарегистрированы")
+
+        dp.include_router(admin_router)
+        logger.info("✅ Админ-роутер зарегистрирован")
 
         # Получаем информацию о боте
         bot_info = await bot.get_me()
