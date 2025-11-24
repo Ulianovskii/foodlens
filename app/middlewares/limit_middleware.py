@@ -1,8 +1,9 @@
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 from typing import Callable, Dict, Any, Awaitable
-
+from app.services.user_service import UserService
 from app.services.limit_service import LimitService
+from app.core.i18n import get_localization
 
 
 class LimitMiddleware(BaseMiddleware):
@@ -12,32 +13,40 @@ class LimitMiddleware(BaseMiddleware):
         event: Message,
         data: Dict[str, Any]
     ) -> Any:
-        # Проверяем только сообщения с фото
-        if not isinstance(event, Message) or not event.photo:
+        # Пропускаем все сообщения без фото
+        if not event.photo:
             return await handler(event, data)
-        
-        database = data['database']
-        user = data['user']
-        locale = data['locale']
-        
-        limit_service = LimitService(database)
-        
-        # Проверяем и увеличиваем счетчик
-        if not await limit_service.check_and_increment_usage(user):
-            # Лимит исчерпан
-            remaining = user.get_remaining_photos()
-            text = locale.get_text("limit_exceeded_detailed").format(
-                used=user.daily_photos_used,
-                limit=user.get_daily_limit(),
-                remaining=remaining
-            )
+
+        # Получаем сервисы из data
+        user_service: UserService = data.get('user_service')
+        if not user_service:
+            return await handler(event, data)
+
+        try:
+            user_id = event.from_user.id
+            user_data = await user_service.get_user(user_id)
             
-            # Добавляем рекламу для бесплатных пользователей
-            if not user.has_premium():
-                text += "\n\n" + locale.get_text("premium_ad")
+            if not user_data:
+                # Если пользователя нет, создаем и пропускаем
+                user = await user_service.get_or_create_user(user_id)
+                return await handler(event, data)
             
-            await event.answer(text)
-            return
-        
-        # Лимит не исчерпан, продолжаем обработку
-        return await handler(event, data)
+            # Создаем объект User из данных
+            from app.models.user import User
+            user = User.from_dict(user_data)
+            
+            # Создаем limit_service и проверяем лимиты
+            limit_service = LimitService(user_service.database)
+            can_proceed = await limit_service.check_and_increment_usage(user)
+            
+            if not can_proceed:
+                i18n = get_localization()
+                await event.answer(i18n.get_text('daily_limit_exceeded'))
+                return  # Прерываем обработку
+            
+            # Если лимиты в порядке, продолжаем
+            return await handler(event, data)
+            
+        except Exception as e:
+            # В случае ошибки пропускаем проверку
+            return await handler(event, data)

@@ -1,4 +1,3 @@
-# app/handlers/photo_handler.py
 from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardRemove, ContentType
 from aiogram.filters import Command, StateFilter
@@ -8,11 +7,19 @@ from app.services.gpt_analyzer import GPTAnalyzer
 from app.core.i18n import get_localization
 from app.keyboards.main_menu import get_main_menu_keyboard
 from app.keyboards.analysis_menu import get_analysis_menu_keyboard
+
+# ===== ДОБАВЛЯЕМ MIDDLEWARE =====
+#from app.middlewares.limit_middleware import LimitMiddleware
+
 import logging
 
 logger = logging.getLogger(__name__)
 
 food_photo_router = Router()
+
+# ===== РЕГИСТРИРУЕМ MIDDLEWARE ТОЛЬКО ДЛЯ ЭТОГО РОУТЕРА =====
+#food_photo_router.message.middleware(LimitMiddleware())
+
 gpt_analyzer = GPTAnalyzer()
 
 class PhotoAnalysis(StatesGroup):
@@ -200,7 +207,7 @@ async def process_analysis_request(message: Message, state: FSMContext, analysis
         i18n = get_localization()
         user_data = await state.get_data()
         
-        # Получаем фото и накопленные сообщения
+        # Получаем фото и накопленные сообщений
         image_file = user_data.get('image_file')
         user_messages = user_data.get('user_messages', [])
         

@@ -10,9 +10,6 @@ from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
 
-# Импорты для Модуля 4
-from app.middlewares.limit_middleware import LimitMiddleware
-
 
 def setup_logging():
     """Настройка логирования"""
@@ -48,7 +45,7 @@ async def main():
         logger.error("BOT_TOKEN не найден в .env файле!")
         return
     
-    logger.info(f"Токен бота: {bot_token[:10]}...")  # Логируем часть токена для проверки
+    logger.info(f"Токен бота: {bot_token[:10]}...")
     
     # Инициализация БД и сервисов
     try:
@@ -74,13 +71,8 @@ async def main():
         dp = Dispatcher(storage=storage, user_service=user_service)
         logger.info("Диспетчер инициализирован")
         
-        # ===== ДОБАВЛЯЕМ MIDDLEWARE ДЛЯ ЛИМИТОВ =====
-        dp.update.middleware(LimitMiddleware())
-        logger.info("✅ Middleware лимитов подключен")
-        
-        # ===== РЕГИСТРАЦИЯ ВСЕХ РОУТЕРОВ =====
-        dp.include_router(router)  # Основные обработчики
-        #dp.include_router(admin_handlers.router)  # Административные команды
+        # Регистрируем роутеры
+        dp.include_router(router)
         logger.info("✅ Все роутеры зарегистрированы")
 
         # Получаем информацию о боте

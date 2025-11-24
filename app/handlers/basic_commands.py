@@ -2,7 +2,6 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from app.services.user_service import UserService
 from app.core.i18n import get_localization
 
 router = Router()
@@ -25,19 +24,12 @@ def get_main_keyboard():
     )
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, user_service: UserService):
-    user_id = message.from_user.id
-    user = await user_service.get_or_create_user(user_id)
-    
+async def cmd_start(message: Message):
     i18n = get_localization()
     
-    # Информация о лимитах
-    limit_info = f"Лимиты: {user.daily_photos_used}/3 фото сегодня"
-    
     await message.answer(
-        f"{i18n.get_text('start_welcome')}\n\n"
-        f"{limit_info}",
-        reply_markup=get_main_keyboard()  # ← ЗАМЕНИТЬ НА КЛАВИАТУРУ
+        f"{i18n.get_text('start_welcome')}\n\n",
+        reply_markup=get_main_keyboard()
     )
 
 @router.message(Command("help"))
@@ -45,7 +37,7 @@ async def cmd_help(message: Message):
     i18n = get_localization()
     await message.answer(
         i18n.get_text('help_text'),
-        reply_markup=get_main_keyboard()  # ← ДОБАВИТЬ КЛАВИАТУРУ
+        reply_markup=get_main_keyboard()
     )
 
 @router.message(Command("cancel"))
@@ -53,7 +45,7 @@ async def cmd_cancel(message: Message):
     i18n = get_localization()
     await message.answer(
         i18n.get_text('cancel_success'),
-        reply_markup=get_main_keyboard()  # ← ВОЗВРАЩАЕМ КЛАВИАТУРУ
+        reply_markup=get_main_keyboard()
     )
 
 @router.message(Command("menu"))

@@ -98,3 +98,17 @@ class User:
         """Сбросить дневной счетчик"""
         self.daily_photos_used = 0
         self.last_reset_date = date.today()
+
+    def can_analyze_photo(self) -> bool:
+        """Может ли пользователь анализировать фото"""
+        if self.subscription_type != 'free':
+            # Премиум пользователь - 10 фото в день
+            return self.daily_photos_used < 10
+        else:
+            # Бесплатный пользователь - 3 фото в день
+            return self.daily_photos_used < 3
+    
+    def reset_daily_counter(self):
+        """Сбросить дневной счетчик"""
+        self.daily_photos_used = 0
+        self.last_reset_date = date.today()
