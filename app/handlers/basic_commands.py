@@ -1,28 +1,12 @@
-# app/handlers/basic_commands.py - ИСПРАВЛЕННЫЙ
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from app.core.i18n import get_localization
+from aiogram.types import Message, CallbackQuery
 from app.services.user_service import UserService
+from app.core.i18n import get_localization
+from app.keyboards.main_menu import get_main_menu_keyboard
+from app.keyboards.inline_menus import get_profile_keyboard, get_premium_menu_keyboard
 
 router = Router()
-
-def get_main_keyboard():
-    """Возвращает основную клавиатуру"""
-    i18n = get_localization()
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text=i18n.get_button_text('analyze_food')),
-                KeyboardButton(text=i18n.get_button_text('profile'))
-            ],
-            [
-                KeyboardButton(text=i18n.get_button_text('history')),
-                KeyboardButton(text=i18n.get_button_text('help'))
-            ]
-        ],
-        resize_keyboard=True
-    )
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -30,7 +14,7 @@ async def cmd_start(message: Message):
     
     await message.answer(
         f"{i18n.get_text('start_welcome')}\n\n",
-        reply_markup=get_main_keyboard()
+        reply_markup=get_main_menu_keyboard()
     )
 
 @router.message(Command("help"))
@@ -38,7 +22,7 @@ async def cmd_help(message: Message):
     i18n = get_localization()
     await message.answer(
         i18n.get_text('help_text'),
-        reply_markup=get_main_keyboard()
+        reply_markup=get_main_menu_keyboard()
     )
 
 @router.message(Command("cancel"))
@@ -46,7 +30,7 @@ async def cmd_cancel(message: Message):
     i18n = get_localization()
     await message.answer(
         i18n.get_text('cancel_success'),
-        reply_markup=get_main_keyboard()
+        reply_markup=get_main_menu_keyboard()
     )
 
 @router.message(Command("menu"))
@@ -54,7 +38,7 @@ async def cmd_menu(message: Message):
     """Команда для возврата в главное меню"""
     await message.answer(
         "🏠 Главное меню",
-        reply_markup=get_main_keyboard()
+        reply_markup=get_main_menu_keyboard()
     )
 
 # Обработчик для кнопок главного меню
@@ -69,23 +53,30 @@ async def handle_main_menu_buttons(message: Message):
     text = message.text
     
     if text == i18n.get_button_text('analyze_food'):
-        await message.answer(i18n.get_text('send_photo_for_analysis'))
+        from app.keyboards.analysis_menu import get_analysis_menu_keyboard
+        await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
     elif text == i18n.get_button_text('profile'):
-        # Вместо заглушки вызываем команду профиля
         await cmd_profile(message)
     elif text == i18n.get_button_text('history'):
-        await message.answer(i18n.get_text('history_development'))
+        await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
     elif text == i18n.get_button_text('help'):
         await message.answer(
             i18n.get_text('help_text'),
-            reply_markup=get_main_keyboard()
+            reply_markup=get_main_menu_keyboard()
         )
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
     i18n = get_localization()
     user_id = message.from_user.id
-    user = await UserService.get_user(user_id)
+    
+    # Временно создаем user_service
+    from app.database import Database
+    from app.config import Config
+    database = Database(Config.DATABASE_URL)
+    user_service = UserService(database)
+    
+    user = await user_service.get_user(user_id)
     
     if not user:
         await message.answer("Пользователь не найден")
@@ -109,13 +100,8 @@ async def cmd_profile(message: Message):
 {i18n.get_text('premium_features_list')}
 """
     
-    # Клавиатура
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=i18n.get_text('btn_get_premium'), callback_data="premium_menu")],
-        [InlineKeyboardButton(text=i18n.get_text('btn_refresh_profile'), callback_data="refresh_profile")]
-    ]) if not is_premium else InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=i18n.get_text('btn_refresh_profile'), callback_data="refresh_profile")]
-    ])
+    # Используем клавиатуру из отдельного файла
+    keyboard = get_profile_keyboard(is_premium=is_premium)
     
     await message.answer(profile_text, reply_markup=keyboard)
 
@@ -128,12 +114,7 @@ async def refresh_profile(callback: CallbackQuery):
 @router.callback_query(F.data == "premium_menu")
 async def show_premium_menu(callback: CallbackQuery):
     i18n = get_localization()
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=i18n.get_text('subscription_week', price="50"), callback_data="subscribe_week")],
-        [InlineKeyboardButton(text=i18n.get_text('subscription_month', price="150"), callback_data="subscribe_month")],
-        [InlineKeyboardButton(text=i18n.get_text('btn_enter_promo'), callback_data="enter_promo")],
-        [InlineKeyboardButton(text=i18n.get_text('btn_back_to_profile'), callback_data="refresh_profile")]
-    ])
+    keyboard = get_premium_menu_keyboard()
     
     await callback.message.edit_text(
         i18n.get_text('subscription_menu_title'),
