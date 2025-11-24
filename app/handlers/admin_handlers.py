@@ -21,10 +21,10 @@ ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(',') if id.strip()]
 
 logger.info(f"🔧 Загружены ADMIN_IDS: {ADMIN_IDS} из строки: '{ADMIN_IDS_STR}'")
 
-router = Router()  # ← ВАЖНО: должно быть router, а не admin_router
+router = Router()
 
-def admin_required(handler):
-    """Декоратор для проверки прав администратора для Message"""
+def admin_required(func):
+    """Декоратор для проверки прав администратора"""
     async def wrapper(message: Message, *args, **kwargs):
         user_id = message.from_user.id
         logger.info(f"🔧 Проверка прав админа для пользователя {user_id}, ADMIN_IDS: {ADMIN_IDS}")
@@ -36,21 +36,7 @@ def admin_required(handler):
             return
         
         logger.info(f"✅ Доступ разрешен пользователю {user_id}")
-        return await handler(message, *args, **kwargs)
-    return wrapper
-
-def admin_callback_required(handler):
-    """Декоратор для проверки прав администратора для CallbackQuery"""
-    async def wrapper(callback: CallbackQuery, *args, **kwargs):
-        user_id = callback.from_user.id
-        
-        if user_id not in ADMIN_IDS:
-            logger.warning(f"⛔️ Отказано в доступе пользователю {user_id} для callback")
-            i18n = get_localization()
-            await callback.answer(i18n.get_text('admin_access_denied'), show_alert=True)
-            return
-        
-        return await handler(callback, *args, **kwargs)
+        return await func(message, *args, **kwargs)
     return wrapper
 
 # ===== ТЕКСТОВЫЕ КОМАНДЫ =====
@@ -231,43 +217,6 @@ async def admin_panel(message: Message):
         "🛠️ Админ-панель\n\nВыберите действие:", 
         reply_markup=get_admin_panel_keyboard()
     )
-
-#@router.callback_query(F.data.startswith("admin_"))
-#@admin_callback_required
-async def admin_actions(callback: CallbackQuery):
-    """Обработка действий из админ-панели"""
-    i18n = get_localization()
-    user_id = callback.from_user.id
-    action = callback.data
-    
-    user_service = UserService(callback.bot.user_service.database)
-    
-    try:
-        if action == "admin_set_free":
-            await user_service.update_subscription(user_id, "free")
-            await callback.answer("✅ Установлен бесплатный тариф")
-        
-        elif action == "admin_set_premium":
-            from datetime import datetime, timedelta
-            subscription_until = datetime.now() + timedelta(days=30)
-            await user_service.update_subscription(user_id, "premium_month", subscription_until)
-            await callback.answer("✅ Установлен премиум тариф на 30 дней")
-        
-        elif action == "admin_reset_limits":
-            await user_service.reset_daily_limits(user_id)
-            await callback.answer("✅ Лимиты сброшены")
-        
-        # Обновляем сообщение с кнопками (только если нужно)
-        try:
-            await callback.message.edit_reply_markup(reply_markup=get_admin_panel_keyboard())
-        except Exception as e:
-            # Игнорируем ошибку "message is not modified"
-            if "message is not modified" not in str(e):
-                logger.error(f"Ошибка при обновлении клавиатуры: {e}")
-        
-    except Exception as e:
-        logger.error(f"Ошибка в admin_actions: {e}")
-        await callback.answer("❌ Произошла ошибка", show_alert=True)
 
 # Экспортируем router
 __all__ = ['router']

@@ -6,25 +6,22 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.handlers import router  # ← здесь уже включены ВСЕ роутеры (включая админ)
+from app.handlers import router
 from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
 
 # Импорты для middleware
 from app.middlewares.limit_middleware import LimitMiddleware
-# УБРАТЬ: from app.middlewares.state_middleware import StateValidationMiddleware
-
 
 def setup_logging():
     """Настройка логирования"""
-    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_level = os.getenv('LOG_LEVEL', 'DEBUG').upper()
     logging.basicConfig(
         level=getattr(logging, log_level),
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
     return logging.getLogger(__name__)
-
 
 def setup_localization():
     """Настройка локализации"""
@@ -32,25 +29,14 @@ def setup_localization():
     localization_manager.default_lang = default_lang
     logging.getLogger(__name__).info(f"Локализация установлена: {default_lang}")
 
-
 async def main():
     """Основная функция для запуска бота"""
     # Загружаем переменные окружения
     load_dotenv()
     
-    def setup_logging():
-        """Настройка логирования"""
-        log_level = os.getenv('LOG_LEVEL', 'DEBUG').upper()  # ИЗМЕНИЛ НА DEBUG
-        logging.basicConfig(
-            level=getattr(logging, log_level),
-            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        )
-        return logging.getLogger(__name__)   
-
     # Настраиваем логирование
     logger = setup_logging()
-
-   
+    
     # Настраиваем локализацию
     setup_localization()
     
@@ -69,7 +55,7 @@ async def main():
         logger.info("✅ База данных инициализирована")
         
         user_service = UserService(database)
-        logger.info("✅ Сервизы инициализированы")
+        logger.info("✅ Сервисы инициализированы")
         
     except Exception as e:
         logger.error(f"❌ Ошибка инициализации БД: {e}")
@@ -92,11 +78,6 @@ async def main():
         photo_router.message.middleware(LimitMiddleware())
         logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
-        # ===== ВРЕМЕННО ОТКЛЮЧАЕМ STATE MIDDLEWARE =====
-        # УБРАТЬ: router.message.middleware(StateValidationMiddleware())
-        # УБРАТЬ: dp.message.middleware(StateValidationMiddleware())
-        logger.info("⚠️ StateValidationMiddleware временно отключен")
-        
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
         dp.include_router(router)
         logger.info("✅ Все роутеры зарегистрированы")
@@ -104,7 +85,6 @@ async def main():
         # ДОБАВЬ ЭТУ ПРОВЕРКУ ПЕРЕД запуском polling
         from app.handlers.admin_handlers import ADMIN_IDS
         print(f"🔧 DEBUG: ADMIN_IDS из admin_handlers: {ADMIN_IDS}")
-    
 
         # Получаем информацию о боте
         bot_info = await bot.get_me()
@@ -113,8 +93,6 @@ async def main():
         # Запуск опроса
         logger.info("Начинаем опрос...")
         await dp.start_polling(bot)
-
-        
         
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
@@ -123,7 +101,6 @@ async def main():
         if 'bot' in locals():
             await bot.session.close()
             logger.info("Сессия бота закрыта")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

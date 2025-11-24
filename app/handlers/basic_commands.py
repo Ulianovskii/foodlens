@@ -4,11 +4,31 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
 from app.core.i18n import get_localization
 from app.keyboards.main_menu import get_main_menu_keyboard
-from app.keyboards.inline_menus import get_profile_keyboard, get_premium_menu_keyboard
+from app.keyboards.inline_menus import get_profile_keyboard
 from app.utils.debug import debug_state, log_message_flow
 from datetime import datetime, date
 
 router = Router()
+
+# Временная функция чтобы избежать ошибки импорта
+def get_premium_menu_keyboard():
+    """Временная функция пока не починим импорты"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    i18n = get_localization()
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🎟️ Активировать промокод",
+                callback_data="activate_promo"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="refresh_profile"
+            )
+        ]
+    ])
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -155,7 +175,6 @@ async def main_menu_handler(callback: CallbackQuery):
         reply_markup=get_main_menu_keyboard()
     )
     await callback.answer()
-
 
 @router.message()
 async def handle_unknown(message: Message):
