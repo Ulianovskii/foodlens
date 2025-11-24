@@ -15,7 +15,7 @@ from app.handlers.admin_handlers import admin_router
 
 # Импорты для middleware
 from app.middlewares.limit_middleware import LimitMiddleware
-from app.handlers.photo_handler import food_photo_router
+from app.handlers.photo_handler import router as food_photo_router
 
 
 def setup_logging():

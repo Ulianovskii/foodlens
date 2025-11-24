@@ -41,29 +41,35 @@ async def cmd_menu(message: Message):
         reply_markup=get_main_menu_keyboard()
     )
 
+
 # Обработчик для кнопок главного меню
-@router.message(F.text.in_([
-    "📸 Анализировать еду", 
-    "👤 Профиль", 
-    "📊 Журнал", 
-    "❓ Помощь"
-]))
+@router.message(F.text)
 async def handle_main_menu_buttons(message: Message):
     i18n = get_localization()
     text = message.text
     
-    if text == i18n.get_button_text('analyze_food'):
+    # Получаем тексты кнопок из локализации
+    analyze_text = i18n.get_button_text('analyze_food')
+    profile_text = i18n.get_button_text('profile')
+    history_text = i18n.get_button_text('history')
+    help_text = i18n.get_button_text('help')
+    menu_text = i18n.get_button_text('menu')
+    
+    if text == analyze_text:
         from app.keyboards.analysis_menu import get_analysis_menu_keyboard
         await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
-    elif text == i18n.get_button_text('profile'):
+    elif text == profile_text:
         await cmd_profile(message)
-    elif text == i18n.get_button_text('history'):
+    elif text == history_text:
         await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
-    elif text == i18n.get_button_text('help'):
+    elif text == help_text:
         await message.answer(
             i18n.get_text('help_text'),
             reply_markup=get_main_menu_keyboard()
         )
+    elif text == menu_text:
+        await cmd_menu(message)
+    # else: не обрабатываем - пропускаем к другим обработчикам
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
@@ -72,8 +78,8 @@ async def cmd_profile(message: Message):
     
     # Временно создаем user_service
     from app.database import Database
-    from app.config import Config
-    database = Database(Config.DATABASE_URL)
+    import os
+    database = Database(os.getenv('DATABASE_URL'))  # ← Берем из переменных окружения
     user_service = UserService(database)
     
     user = await user_service.get_user(user_id)
