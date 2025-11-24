@@ -63,14 +63,13 @@ class RussianLocalization(BaseLocalization):
                      "💎 Получите премиум-подписку для неограниченного анализа!",
             
             # ===== СООБЩЕНИЯ О ПЛАТНЫХ ФУНКЦИЯХ =====
-            'limits_info': "📊 Ваши лимиты:\n\n"
-            "📸 Анализов фото: {photos_used}/{photos_limit}\n"
-            "💬 Текстовых уточнений: {texts_used}/{texts_limit}\n"
-            "💎 Статус: {status}\n"
-            "🔄 Обновление: сегодня в 00:00",
-    
             'premium_active': "💎 Премиум-активен",
             'free_tier': "🆓 Бесплатный тариф",
+            'limits_info': "📊 Ваши лимиты:\n\n"
+                        "📸 Анализов фото: {photos_used}/{photos_limit}\n"
+                        "💬 Текстовых уточнений: {texts_used}/{texts_limit}\n"
+                        "💎 Статус: {status}\n"
+                        "🔄 Обновление: сегодня в 00:00",
         }
         
         # ===== ТЕКСТЫ КНОПОК =====

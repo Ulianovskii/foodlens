@@ -1,22 +1,20 @@
-# app/models/user.py
+# app/models/user.py - ИСПРАВЛЕННЫЙ
+from dataclasses import dataclass  # ← ДОБАВИТЬ ЭТОТ ИМПОРТ!
+from datetime import datetime, date
+from typing import Optional
+
 @dataclass
 class User:
-    # ... поля ...
-    
-    def to_dict(self) -> dict:
-        """Конвертирует User в dict для сохранения в БД"""
-        return {
-            'user_id': self.user_id,
-            'created_at': self.created_at,
-            'language': self.language,
-            'subscription_type': self.subscription_type,
-            'subscription_until': self.subscription_until,
-            'daily_photos_used': self.daily_photos_used,
-            'daily_texts_used': self.daily_texts_used,
-            'last_reset_date': self.last_reset_date,
-            'custom_photo_limit': self.custom_photo_limit,
-            'custom_text_limit': self.custom_text_limit
-        }
+    user_id: int
+    created_at: datetime
+    language: str = "ru"
+    subscription_type: str = "free"
+    subscription_until: Optional[datetime] = None
+    daily_photos_used: int = 0
+    daily_texts_used: int = 0
+    last_reset_date: Optional[date] = None
+    custom_photo_limit: Optional[int] = None
+    custom_text_limit: Optional[int] = None
     
     @classmethod
     def from_dict(cls, data: dict) -> 'User':
