@@ -11,18 +11,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Загружаем переменные окружения
+from dotenv import load_dotenv
+load_dotenv()
+
 # Получаем ID админов из .env
 ADMIN_IDS_STR = os.getenv('ADMIN_USER_IDS', '')
 ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(',') if id.strip()]
 
-# ДОБАВЬ ЭТОТ ОТЛАДОЧНЫЙ ВЫВОД
 logger.info(f"🔧 Загружены ADMIN_IDS: {ADMIN_IDS} из строки: '{ADMIN_IDS_STR}'")
 
 admin_router = Router()
 
 def admin_required(handler):
     """Декоратор для проверки прав администратора для Message"""
-    async def wrapper(message: Message, *args, **kwargs):
+    async def wrapper(message: Message):
         user_id = message.from_user.id
         logger.info(f"🔧 Проверка прав админа для пользователя {user_id}, ADMIN_IDS: {ADMIN_IDS}")
         
@@ -32,19 +35,19 @@ def admin_required(handler):
             await message.answer(i18n.get_text('admin_access_denied'))
             return
         logger.info(f"✅ Доступ разрешен пользователю {user_id}")
-        return await handler(message, *args, **kwargs)
+        return await handler(message)  # ← ПЕРЕДАЕМ ТОЛЬКО message
     return wrapper
 
 def admin_callback_required(handler):
     """Декоратор для проверки прав администратора для CallbackQuery"""
-    async def wrapper(callback: CallbackQuery, *args, **kwargs):
+    async def wrapper(callback: CallbackQuery):
         user_id = callback.from_user.id
         if user_id not in ADMIN_IDS:
             logger.warning(f"⛔️ Отказано в доступе пользователю {user_id} для callback")
             i18n = get_localization()
             await callback.answer(i18n.get_text('admin_access_denied'), show_alert=True)
             return
-        return await handler(callback, *args, **kwargs)
+        return await handler(callback)  # ← ПЕРЕДАЕМ ТОЛЬКО callback
     return wrapper
 
 # ===== ТЕКСТОВЫЕ КОМАНДЫ =====

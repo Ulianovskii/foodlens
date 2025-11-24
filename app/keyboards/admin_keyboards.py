@@ -1,3 +1,4 @@
+#app/keyboards/admin_keyboards.py
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from app.core.i18n import get_localization
 

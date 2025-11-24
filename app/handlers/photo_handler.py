@@ -20,6 +20,9 @@ class PhotoAnalysis(StatesGroup):
     active_session = State()
     analysis_done = State()
 
+# Импортируем состояние промокодов
+from app.handlers.promo_handlers import PromoStates
+
 # ===== ОСНОВНОЕ МЕНЮ =====
 @router.message(F.text == get_localization().get_button_text('analyze_food'))
 @router.message(Command("analyze"))
@@ -175,7 +178,12 @@ async def handle_photo_direct(message: Message, state: FSMContext):
     await handle_photo_with_caption(message, state)
 
 # ===== ТЕКСТ БЕЗ СЕССИИ =====
-@router.message(F.text)
+@router.message(
+    F.text,
+    ~StateFilter(PhotoAnalysis.active_session),
+    ~StateFilter(PhotoAnalysis.analysis_done)
+    # УБРАЛ: ~StateFilter(PromoStates.waiting_for_promo) - больше не нужно
+)
 async def handle_text_without_session(message: Message, state: FSMContext):
     """Обрабатывает текстовые сообщения без активной сессии"""
     i18n = get_localization()

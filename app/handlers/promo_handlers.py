@@ -1,93 +1,119 @@
-#app/handlers/promo_handlers.py
+# app/handlers/promo_handlers.py
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
-from aiogram.filters import StateFilter
-from aiogram.fsm.context import FSMContext
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 import logging
 
 from app.services.promo_service import PromoService
 from app.services.user_service import UserService
 from app.core.i18n import get_localization
+from app.keyboards.main_menu import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
+# Добавляем FSM для промокодов
 class PromoStates(StatesGroup):
     waiting_for_promo = State()
 
 @router.callback_query(F.data == "enter_promo")
 async def enter_promo(callback: CallbackQuery, state: FSMContext):
-    i18n = get_localization()
-    await callback.message.answer(
-        i18n.get_text('promo_enter'),
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await state.set_state(PromoStates.waiting_for_promo)
-    await callback.answer()
-
-@router.message(StateFilter(PromoStates.waiting_for_promo))
-async def process_promo(message: Message, state: FSMContext):
+    """Обработчик ввода промокода"""
     i18n = get_localization()
     
-    # Получаем user_service из бота
-    user_service = getattr(message.bot, 'user_service', None)
-    if not user_service:
-        await message.answer("❌ Сервис недоступен")
-        await state.clear()
-        return
-        
+    # Устанавливаем состояние ожидания промокода
+    await state.set_state(PromoStates.waiting_for_promo)
+    
+    await callback.message.answer(
+        i18n.get_text('promo_enter')
+    )
+    await callback.answer()
+
+@router.message(PromoStates.waiting_for_promo)
+async def process_promo_with_state(message: Message, state: FSMContext):
+    """Обработка промокода с использованием FSM"""
+    i18n = get_localization()
+    user_id = message.from_user.id
+    
+    # Очищаем состояние
+    await state.clear()
+    
     if not message.text:
         await message.answer("❌ Пожалуйста, введите промокод")
         return
         
     promo_code = message.text.strip().upper()
-    user_id = message.from_user.id
     
     try:
-        # Получаем пользователя (только по ID, без лишних данных)
+        # Получаем user_service из бота
+        user_service = UserService(message.bot.user_service.database)
+        
+        # Получаем пользователя
         user = await user_service.get_user(user_id)
         
         if not user:
             await message.answer("❌ Пользователь не найден")
-            await state.clear()
             return
         
         # Активируем промокод
         promo_service = PromoService(user_service.database)
-        success = await promo_service.activate_promo_code(promo_code, user)
+        success, result = await promo_service.activate_promo_code(promo_code, user)
         
         if success:
             # Обновляем данные пользователя
             user = await user_service.get_user(user_id)
             
+            # Формируем дату окончания
+            until_date = user.subscription_until.strftime("%d.%m.%Y") if user.subscription_until else "неизвестно"
+            
             await message.answer(
-                i18n.get_text('promo_activated').format(
-                    subscription_type=user.subscription_type,
-                    until=user.subscription_until.strftime("%d.%m.%Y") if user.subscription_until else "не указано"
-                ),
-                reply_markup=ReplyKeyboardRemove()
+                i18n.get_text('promo_success', until=until_date),
+                reply_markup=get_main_menu_keyboard()
             )
-            # Показываем обновленный профиль
-            from app.handlers.basic_commands import cmd_profile
-            await cmd_profile(message)
+            
         else:
-            await message.answer(i18n.get_text('promo_invalid'))
+            # Определяем тип ошибки
+            error_message = i18n.get_text('promo_invalid')
+            if "не найден" in result.lower():
+                error_message = i18n.get_text('promo_not_found')
+            elif "просрочен" in result.lower():
+                error_message = i18n.get_text('promo_expired')
+            elif "использован" in result.lower():
+                error_message = i18n.get_text('promo_already_used')
+            elif "уже есть подписка" in result.lower():
+                error_message = i18n.get_text('promo_already_have_subscription')
+            
+            await message.answer(
+                error_message,
+                reply_markup=get_main_menu_keyboard()
+            )
     
     except Exception as e:
         logger.error(f"Ошибка активации промокода: {e}")
-        await message.answer("❌ Произошла ошибка при активации промокода")
-    
-    await state.clear()
+        await message.answer(
+            "❌ Произошла ошибка при активации промокода",
+            reply_markup=get_main_menu_keyboard()
+        )
 
-# Обработчики для кнопок подписки (временно заглушки)
+# Обработчик для отмены ввода промокода
+@router.callback_query(F.data == "refresh_profile")
+async def cancel_promo(callback: CallbackQuery, state: FSMContext):
+    """Отмена ввода промокода и возврат в профиль"""
+    # Очищаем состояние
+    await state.clear()
+    
+    # Показываем профиль
+    from app.handlers.basic_commands import show_user_profile
+    await show_user_profile(callback.message)
+    await callback.answer("✅ Возврат в профиль")
+
+# Заглушки для других кнопок
 @router.callback_query(F.data == "subscribe_week")
 async def subscribe_week(callback: CallbackQuery):
-    i18n = get_localization()
     await callback.answer("⏳ Функция оплаты в разработке", show_alert=True)
 
 @router.callback_query(F.data == "subscribe_month")
 async def subscribe_month(callback: CallbackQuery):
-    i18n = get_localization()
     await callback.answer("⏳ Функция оплаты в разработке", show_alert=True)
