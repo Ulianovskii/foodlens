@@ -66,23 +66,26 @@ async def handle_help(message: Message):
 @router.message(F.text == get_localization().get_button_text('menu'))
 async def handle_menu(message: Message):
     await cmd_menu(message)
+
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
     i18n = get_localization()
     user_id = message.from_user.id
     
-    # Временно создаем user_service
-    from app.database import Database
-    import os
-    database = Database(os.getenv('DATABASE_URL'))  # ← Берем из переменных окружения
-    user_service = UserService(database)
+    # Получаем user_service из бота
+    user_service = getattr(message.bot, 'user_service', None)
     
+    if not user_service:
+        await message.answer("❌ Сервис недоступен")
+        return
+        
     user = await user_service.get_user(user_id)
     
     if not user:
         await message.answer("Пользователь не найден")
         return
     
+        
     # Определяем тип подписки
     is_premium = user.subscription_type == "premium"
     daily_limit = 10 if is_premium else 3
@@ -107,18 +110,22 @@ async def cmd_profile(message: Message):
     await message.answer(profile_text, reply_markup=keyboard)
 
 # Обработчики callback-запросов для профиля
+
 @router.callback_query(F.data == "refresh_profile")
 async def refresh_profile(callback: CallbackQuery):
+    # Получаем user_service из бота
+    user_service = getattr(callback.bot, 'user_service', None)
+    
+    if not user_service:
+        await callback.answer("❌ Сервис недоступен")
+        return
+        
+    user_id = callback.from_user.id
+    user = await user_service.get_user(user_id)  # ← ИСПРАВЛЕНО: get_user вместо get_or_create_user
+    
+    if not user:
+        await callback.answer("❌ Пользователь не найден")
+        return
+        
     await cmd_profile(callback.message)
     await callback.answer("✅ Профиль обновлен")
-
-@router.callback_query(F.data == "premium_menu")
-async def show_premium_menu(callback: CallbackQuery):
-    i18n = get_localization()
-    keyboard = get_premium_menu_keyboard()
-    
-    await callback.message.edit_text(
-        i18n.get_text('subscription_menu_title'),
-        reply_markup=keyboard
-    )
-    await callback.answer()

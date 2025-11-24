@@ -60,7 +60,7 @@ async def main():
         await database.init_db()
         logger.info("✅ База данных инициализирована")
         
-        user_service = UserService(database)
+        user_service = UserService(database)  # ← СОЗДАЕМ user_service здесь
         logger.info("✅ Сервисы инициализированы")
         
     except Exception as e:
@@ -70,16 +70,18 @@ async def main():
     # Инициализация бота и диспетчера
     try:
         bot = Bot(token=bot_token)
+        bot.user_service = user_service  # ← ДОБАВЛЯЕМ user_service к боту
         logger.info("Бот инициализирован")
         
         storage = MemoryStorage()
         
-        # Создаем диспетчер и передаем сервисы
-        dp = Dispatcher(storage=storage, user_service=user_service)
+        # Создаем диспетчер
+        dp = Dispatcher(storage=storage)
         logger.info("Диспетчер инициализирован")
         
         # ===== РЕГИСТРИРУЕМ MIDDLEWARE ТОЛЬКО ДЛЯ ФОТО РОУТЕРА =====
-        food_photo_router.message.middleware(LimitMiddleware())
+        from app.handlers.photo_handler import router as photo_router
+        photo_router.message.middleware(LimitMiddleware())
         logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
