@@ -9,6 +9,7 @@ from app.handlers import router
 from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
+from app.handlers import promo_handlers
 
 from app.handlers.admin_handlers import admin_router
 
@@ -84,9 +85,6 @@ async def main():
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
         dp.include_router(router)
         logger.info("✅ Все роутеры зарегистрированы")
-
-        dp.include_router(admin_router)
-        logger.info("✅ Админ-роутер зарегистрирован")
 
         # Получаем информацию о боте
         bot_info = await bot.get_me()

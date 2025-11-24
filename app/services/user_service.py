@@ -64,3 +64,26 @@ class UserService:
             user.daily_photos_used = 0
             user.last_reset_date = date.today()
             await self.save_user(user)
+    
+    async def get_user(self, user_id: int) -> User:
+        """Получить пользователя по ID"""
+        user_data = await self.database.get_user(user_id)
+        if user_data:
+            return User.from_dict(user_data)
+        return None
+
+    async def update_subscription(self, user_id: int, subscription_type: str, subscription_until: datetime = None):
+        """Обновляет подписку пользователя"""
+        user = await self.get_user(user_id)
+        if user:
+            user.subscription_type = subscription_type
+            user.subscription_until = subscription_until
+            await self.save_user(user)
+
+    async def reset_daily_limits(self, user_id: int):
+        """Сбрасывает дневные лимиты пользователя"""
+        user = await self.get_user(user_id)
+        if user:
+            user.daily_photos_used = 0
+            user.last_reset_date = date.today()
+            await self.save_user(user)

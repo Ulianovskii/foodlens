@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from app.services.user_service import UserService
 from app.services.promo_service import PromoService
@@ -21,9 +21,11 @@ def admin_required(handler):
         return await handler(message, *args, **kwargs)
     return wrapper
 
+# ===== ТЕКСТОВЫЕ КОМАНДЫ =====
+
 @admin_router.message(Command("generate_promo"))
 @admin_required
-async def cmd_generate_promo(message: Message, promo_service: PromoService):
+async def cmd_generate_promo(message: Message):
     """Генерация промокода: /generate_promo week 1"""
     try:
         parts = message.text.split()
@@ -37,6 +39,9 @@ async def cmd_generate_promo(message: Message, promo_service: PromoService):
         if promo_type not in ['week', 'month']:
             await message.answer("❌ Тип промокода должен быть 'week' или 'month'")
             return
+        
+        # Получаем сервисы из контекста бота
+        promo_service = PromoService(message.bot.user_service.database)
         
         # Генерируем промокоды
         promo_codes = await promo_service.create_promo_codes(
@@ -56,53 +61,53 @@ async def cmd_generate_promo(message: Message, promo_service: PromoService):
 
 @admin_router.message(Command("reset_limits"))
 @admin_required
-async def cmd_reset_limits(message: Message, limit_service: LimitService, user_service: UserService):
+async def cmd_reset_limits(message: Message):
     """Сброс лимитов пользователя: /reset_limits [user_id]"""
     try:
         parts = message.text.split()
         user_id = int(parts[1]) if len(parts) > 1 else message.from_user.id
         
-        success = await limit_service.reset_user_limits(user_id)
-        if success:
+        user_service = UserService(message.bot.user_service.database)
+        user = await user_service.get_user(user_id)
+        
+        if user:
+            await user_service.reset_daily_limits(user_id)
             await message.answer(f"✅ Лимиты пользователя {user_id} сброшены")
         else:
-            await message.answer("❌ Ошибка сброса лимитов")
+            await message.answer("❌ Пользователь не найден")
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
 @admin_router.message(Command("reset_sub"))
 @admin_required
-async def cmd_reset_subscription(message: Message, user_service: UserService):
+async def cmd_reset_subscription(message: Message):
     """Сброс подписки пользователя: /reset_sub [user_id]"""
     try:
         parts = message.text.split()
         user_id = int(parts[1]) if len(parts) > 1 else message.from_user.id
         
-        success = await user_service.downgrade_to_free(user_id)
-        if success:
-            await message.answer(f"✅ Подписка пользователя {user_id} сброшена")
-        else:
-            await message.answer("❌ Ошибка сброса подписки")
+        user_service = UserService(message.bot.user_service.database)
+        await user_service.update_subscription(user_id, "free")
+        await message.answer(f"✅ Подписка пользователя {user_id} сброшена")
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
 @admin_router.message(Command("user_info"))
 @admin_required
-async def cmd_user_info(message: Message, user_service: UserService):
+async def cmd_user_info(message: Message):
     """Информация о пользователе: /user_info [user_id]"""
     try:
         parts = message.text.split()
         user_id = int(parts[1]) if len(parts) > 1 else message.from_user.id
         
-        user_data = await user_service.get_user(user_id)
-        if not user_data:
+        user_service = UserService(message.bot.user_service.database)
+        user = await user_service.get_user(user_id)
+        
+        if not user:
             await message.answer("❌ Пользователь не найден")
             return
-        
-        from app.models.user import User
-        user = User.from_dict(user_data)
         
         subscription_info = "нет"
         if user.subscription_until:
@@ -126,9 +131,10 @@ Username: @{user.username or 'нет'}
 
 @admin_router.message(Command("promo_list"))
 @admin_required
-async def cmd_promo_list(message: Message, promo_service: PromoService):
+async def cmd_promo_list(message: Message):
     """Список активных промокодов"""
     try:
+        promo_service = PromoService(message.bot.user_service.database)
         promos = await promo_service.get_all_promo_codes()
         
         if not promos:
@@ -147,7 +153,7 @@ async def cmd_promo_list(message: Message, promo_service: PromoService):
 
 @admin_router.message(Command("activate_promo"))
 @admin_required  
-async def cmd_activate_promo(message: Message, promo_service: PromoService, user_service: UserService):
+async def cmd_activate_promo(message: Message):
     """Активировать промокод для пользователя: /activate_promo CODE [user_id]"""
     try:
         parts = message.text.split()
@@ -158,15 +164,16 @@ async def cmd_activate_promo(message: Message, promo_service: PromoService, user
         code = parts[1]
         user_id = int(parts[2]) if len(parts) > 2 else message.from_user.id
         
-        user_data = await user_service.get_user(user_id)
-        if not user_data:
+        user_service = UserService(message.bot.user_service.database)
+        user = await user_service.get_user(user_id)
+        
+        if not user:
             await message.answer("❌ Пользователь не найден")
             return
         
-        from app.models.user import User
-        user = User.from_dict(user_data)
-        
+        promo_service = PromoService(message.bot.user_service.database)
         success = await promo_service.activate_promo_code(code, user)
+        
         if success:
             await message.answer(f"✅ Промокод {code} активирован для пользователя {user_id}")
         else:
@@ -174,3 +181,47 @@ async def cmd_activate_promo(message: Message, promo_service: PromoService, user
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
+
+# ===== ИНТЕРАКТИВНАЯ АДМИН-ПАНЕЛЬ =====
+
+@admin_router.message(Command("admin"))
+@admin_required
+async def admin_panel(message: Message):
+    """Интерактивная админ-панель"""
+    i18n = get_localization()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=i18n.get_text('admin_sub_toggle_free'), callback_data="admin_set_free")],
+        [InlineKeyboardButton(text=i18n.get_text('admin_sub_toggle_premium'), callback_data="admin_set_premium")],
+        [InlineKeyboardButton(text=i18n.get_text('admin_reset_limits'), callback_data="admin_reset_limits")]
+    ])
+    
+    await message.answer(i18n.get_text('admin_actions'), reply_markup=keyboard)
+
+@admin_router.callback_query(F.data.startswith("admin_"))
+@admin_required
+async def admin_actions(callback: CallbackQuery):
+    """Обработка действий из админ-панели"""
+    i18n = get_localization()
+    user_id = callback.from_user.id
+    action = callback.data
+    
+    user_service = UserService(callback.bot.user_service.database)
+    
+    if action == "admin_set_free":
+        await user_service.update_subscription(user_id, "free")
+        await callback.answer("✅ Установлен бесплатный тариф")
+    
+    elif action == "admin_set_premium":
+        from datetime import datetime, timedelta
+        subscription_until = datetime.now() + timedelta(days=30)
+        await user_service.update_subscription(user_id, "premium", subscription_until)
+        await callback.answer("✅ Установлен премиум тариф на 30 дней")
+    
+    elif action == "admin_reset_limits":
+        await user_service.reset_daily_limits(user_id)
+        await callback.answer("✅ Лимиты сброшены")
+    
+    # Показываем обновленный профиль
+    from app.handlers.basic_commands import cmd_profile
+    await cmd_profile(callback.message)
