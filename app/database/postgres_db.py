@@ -60,9 +60,9 @@ class Database:
                     custom_photo_limit = EXCLUDED.custom_photo_limit,
                     custom_text_limit = EXCLUDED.custom_text_limit,
                     updated_at = NOW()
-            ''', (
-                user_data.get('user_id'), 
-                user_data.get('created_at'), 
+            ''', 
+                user_data['user_id'], 
+                user_data['created_at'], 
                 user_data.get('language', 'ru'),
                 user_data.get('subscription_type', 'free'), 
                 user_data.get('subscription_until'),
@@ -71,7 +71,7 @@ class Database:
                 user_data.get('last_reset_date'), 
                 user_data.get('custom_photo_limit'),
                 user_data.get('custom_text_limit')
-            ))
+            )
     
     async def _create_tables(self):
         """Создание таблиц если их нет"""  # ← ДОБАВЛЕН ОТСТУП!

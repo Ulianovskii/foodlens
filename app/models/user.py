@@ -18,8 +18,11 @@ class User:
     
     @classmethod
     def from_dict(cls, data: dict) -> 'User':
-        """Создает User из данных БД"""
-        return cls(**data)
+        """Создает User из данных БД, игнорируя лишние поля"""
+        # Создаем копию без лишних полей
+        filtered_data = {k: v for k, v in data.items() 
+                        if k in cls.__dataclass_fields__}
+        return cls(**filtered_data)
     
     def to_dict(self) -> dict:
         """Конвертирует User в dict для БД"""
