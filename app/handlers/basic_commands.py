@@ -114,7 +114,7 @@ async def cmd_profile(message: Message):
 @router.callback_query(F.data == "refresh_profile")
 async def refresh_profile(callback: CallbackQuery):
     # Получаем user_service из бота
-    user_service = getattr(callback.bot, 'user_service', None)
+    user_service = getattr(message.bot, 'user_service', None)
     
     if not user_service:
         await callback.answer("❌ Сервис недоступен")

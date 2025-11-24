@@ -42,13 +42,11 @@ class Database:
         async with pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO users 
-                (user_id, username, first_name, last_name, created_at, language, subscription_type, 
+                (user_id, username, created_at, language, subscription_type, 
                 subscription_until, daily_photos_used, total_photos_analyzed, last_reset_date)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (user_id) DO UPDATE SET
                     username = EXCLUDED.username,
-                    first_name = EXCLUDED.first_name,
-                    last_name = EXCLUDED.last_name,
                     language = EXCLUDED.language,
                     subscription_type = EXCLUDED.subscription_type,
                     subscription_until = EXCLUDED.subscription_until,
@@ -59,8 +57,6 @@ class Database:
             ''', 
                 user_data['user_id'],
                 user_data.get('username'),
-                user_data.get('first_name'),
-                user_data.get('last_name'),
                 user_data['created_at'], 
                 user_data.get('language', 'ru'),
                 user_data.get('subscription_type', 'free'), 
@@ -69,7 +65,7 @@ class Database:
                 user_data.get('total_photos_analyzed', 0),
                 user_data.get('last_reset_date')
             )
-    
+
     async def _create_tables(self):
         """Создание таблиц если их нет"""
         try:
@@ -79,8 +75,6 @@ class Database:
                     CREATE TABLE IF NOT EXISTS users (
                         user_id BIGINT PRIMARY KEY,
                         username VARCHAR(100),
-                        first_name VARCHAR(100),
-                        last_name VARCHAR(100),
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         language VARCHAR(10) DEFAULT 'ru',
                         subscription_type VARCHAR(20) DEFAULT 'free',
@@ -110,7 +104,7 @@ class Database:
             logger.error(f"❌ Ошибка создания таблиц: {e}")
             raise
 
-    # МЕТОДЫ ДЛЯ ПРОМОКОДОВ - ДОБАВИТЬ ВНУТРЬ КЛАССА!
+    # МЕТОДЫ ДЛЯ ПРОМОКОДОВ
     
     async def save_promo_code(self, promo_data: dict):
         """Сохранить промокод в БД"""

@@ -8,8 +8,7 @@ class UserService:
     def __init__(self, database):
         self.database = database
     
-    async def get_or_create_user(self, telegram_id: int, username: str = None, 
-                               first_name: str = None, last_name: str = None) -> User:
+    async def get_or_create_user(self, telegram_id: int, username: str = None) -> User:
         """Получить пользователя или создать нового"""
         user_data = await self.database.get_user(telegram_id)
         
@@ -19,8 +18,6 @@ class UserService:
             # Обновляем данные если нужно
             if username and user.username != username:
                 user.username = username
-                user.first_name = first_name
-                user.last_name = last_name
                 await self.save_user(user)
             return user
         else:
@@ -28,8 +25,6 @@ class UserService:
             user = User(
                 user_id=telegram_id,
                 username=username,
-                first_name=first_name,
-                last_name=last_name,
                 created_at=datetime.now(),
                 last_reset_date=date.today()
             )

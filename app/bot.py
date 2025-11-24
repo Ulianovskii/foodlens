@@ -70,7 +70,7 @@ async def main():
     # Инициализация бота и диспетчера
     try:
         bot = Bot(token=bot_token)
-        bot.user_service = user_service  # ← ДОБАВЛЯЕМ user_service к боту
+        bot.user_service = user_service
         logger.info("Бот инициализирован")
         
         storage = MemoryStorage()

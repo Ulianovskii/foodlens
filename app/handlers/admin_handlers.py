@@ -117,7 +117,6 @@ async def cmd_user_info(message: Message):
 👤 Информация о пользователе:
 ID: {user.user_id}
 Username: @{user.username or 'нет'}
-Имя: {user.first_name or 'не указано'}
 Подписка: {subscription_info}
 Фото сегодня: {user.daily_photos_used}/{user.get_daily_limit()}
 Всего фото: {user.total_photos_analyzed}
