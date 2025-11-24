@@ -5,7 +5,7 @@ import time
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from app.prompts import get_system_prompt
+from app.prompts.food_analysis import get_system_prompt
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -20,14 +20,14 @@ class GPTAnalyzer:
             print(f"🔍 DEBUG: Начало анализа, user_id: {user_id}")
             print(f"🔍 DEBUG: Тип image_file: {type(image_file)}")
             print(f"🔍 DEBUG: analysis_type: {analysis_type}")
+            print(f"🔍 DEBUG: user_message: {user_message}")
             
             MAX_MESSAGES = 5
             
-            # Если это первый запрос - конвертируем фото в base64
+            # Если это первый запрос с фото - конвертируем фото в base64
             if image_file and user_id not in self.user_sessions:
                 print("🔍 DEBUG: Первый запрос с фото")
                 
-                # Проверим что файл можно читать
                 try:
                     if hasattr(image_file, 'getvalue'):  # Если это BytesIO
                         image_data = image_file.getvalue()
@@ -48,10 +48,13 @@ class GPTAnalyzer:
                     print(f"❌ DEBUG: Ошибка чтения файла: {e}")
                     return None
                 
+                # Формируем системный промт
+                system_prompt = get_system_prompt(user_message, analysis_type)
+                
                 messages = [
                     {
                         "role": "system", 
-                        "content": get_system_prompt(None, analysis_type)
+                        "content": system_prompt
                     },
                     {
                         "role": "user",
@@ -65,22 +68,70 @@ class GPTAnalyzer:
                     }
                 ]
                 
+                # Если есть user_message (подпись или накопленные сообщения) - добавляем их
+                if user_message:
+                    messages.append({
+                        "role": "user",
+                        "content": f"Дополнительная информация от пользователя:\n{user_message}"
+                    })
+                
                 self.user_sessions[user_id] = {
                     "messages": messages,
                     "last_activity": time.time(),
-                    "messages_count": 1
+                    "messages_count": 1,
+                    "current_analysis_type": analysis_type  # Сохраняем тип анализа
                 }
                 
             elif user_id in self.user_sessions:
+                # Продолжение существующей сессии
                 session = self.user_sessions[user_id]
-                if session["messages_count"] >= MAX_MESSAGES:
+                
+                # Если тип анализа изменился (например, с nutrition на recipe) - создаем новую сессию
+                if session["current_analysis_type"] != analysis_type:
+                    print(f"🔍 DEBUG: Смена типа анализа с {session['current_analysis_type']} на {analysis_type} - создаем новую сессию")
+                    
+                    # Создаем новую сессию с новым промтом
+                    system_prompt = get_system_prompt(user_message, analysis_type)
+                    
+                    messages = [
+                        {
+                            "role": "system", 
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "Проанализируй это фото еды:"},
+                                {
+                                    "type": "image_url", 
+                                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                                }
+                            ]
+                        }
+                    ]
+                    
+                    # Если есть user_message - добавляем его
+                    if user_message:
+                        messages.append({
+                            "role": "user",
+                            "content": f"Дополнительная информация от пользователя:\n{user_message}"
+                        })
+                    
+                    session["messages"] = messages
+                    session["messages_count"] = 1
+                    session["current_analysis_type"] = analysis_type
+                
+                elif session["messages_count"] >= MAX_MESSAGES:
                     return {"error": "message_limit_reached"}
                 
-                if user_message:
+                elif user_message:
+                    # Если есть текстовое сообщение - добавляем его
                     session["messages"].append({"role": "user", "content": user_message})
                     session["messages_count"] += 1
                 else:
-                    session["messages"][0]["content"] = get_system_prompt(None, analysis_type)
+                    # Если просто нажали кнопку - обновляем системный промт
+                    system_prompt = get_system_prompt(None, analysis_type)
+                    session["messages"][0]["content"] = system_prompt
                     session["messages"].append({"role": "user", "content": f"Проанализируй {analysis_type}:"})
                     session["messages_count"] += 1
             
@@ -101,7 +152,7 @@ class GPTAnalyzer:
             
             messages_left = MAX_MESSAGES - self.user_sessions[user_id]["messages_count"]
             
-            print(f"🔍 DEBUG: Анализ завершен успешно!")
+            print(f"🔍 DEBUG: Анализ завершен успешно! Сообщений осталось: {messages_left}")
             
             return {
                 "analysis": gpt_response,

@@ -3,7 +3,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from app.core.i18n import get_localization
 
-def get_analysis_menu_keyboard(refinements_left: int = 3):
+def get_analysis_menu_keyboard():
     """Клавиатура после загрузки фото"""
     i18n = get_localization()
     builder = ReplyKeyboardBuilder()
@@ -12,7 +12,7 @@ def get_analysis_menu_keyboard(refinements_left: int = 3):
         KeyboardButton(text=i18n.get_button_text("nutrition")),
         KeyboardButton(text=i18n.get_button_text("recipe")),
         KeyboardButton(text=i18n.get_button_text("new_photo")),
-        KeyboardButton(text=i18n.get_button_text("cancel"))
+        KeyboardButton(text=i18n.get_button_text("cancel"))  # Теперь это "Меню"
     )
     
     builder.adjust(2)
