@@ -13,7 +13,7 @@ from app.services import UserService
 
 # Импорты для middleware
 from app.middlewares.limit_middleware import LimitMiddleware
-from app.middlewares.state_middleware import StateValidationMiddleware
+# УБРАТЬ: from app.middlewares.state_middleware import StateValidationMiddleware
 
 
 def setup_logging():
@@ -38,9 +38,19 @@ async def main():
     # Загружаем переменные окружения
     load_dotenv()
     
+    def setup_logging():
+        """Настройка логирования"""
+        log_level = os.getenv('LOG_LEVEL', 'DEBUG').upper()  # ИЗМЕНИЛ НА DEBUG
+        logging.basicConfig(
+            level=getattr(logging, log_level),
+            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        )
+        return logging.getLogger(__name__)   
+
     # Настраиваем логирование
     logger = setup_logging()
-    
+
+   
     # Настраиваем локализацию
     setup_localization()
     
@@ -59,7 +69,7 @@ async def main():
         logger.info("✅ База данных инициализирована")
         
         user_service = UserService(database)
-        logger.info("✅ Сервисы инициализированы")
+        logger.info("✅ Сервизы инициализированы")
         
     except Exception as e:
         logger.error(f"❌ Ошибка инициализации БД: {e}")
@@ -82,12 +92,14 @@ async def main():
         photo_router.message.middleware(LimitMiddleware())
         logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
+        # ===== ВРЕМЕННО ОТКЛЮЧАЕМ STATE MIDDLEWARE =====
+        # УБРАТЬ: router.message.middleware(StateValidationMiddleware())
+        # УБРАТЬ: dp.message.middleware(StateValidationMiddleware())
+        logger.info("⚠️ StateValidationMiddleware временно отключен")
+        
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
-        # УБИРАЕМ dp.include_router(admin_router) - он уже в основном роутере
-        dp.include_router(router)  # ← ТОЛЬКО ОДИН РОУТЕР, в нем уже все включено
+        dp.include_router(router)
         logger.info("✅ Все роутеры зарегистрированы")
-
-        router.message.middleware(StateValidationMiddleware())
 
         # ДОБАВЬ ЭТУ ПРОВЕРКУ ПЕРЕД запуском polling
         from app.handlers.admin_handlers import ADMIN_IDS

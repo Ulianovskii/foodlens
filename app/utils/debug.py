@@ -10,7 +10,7 @@ async def debug_state(user_id: int, handler: str, message: str = ""):
     timestamp = datetime.now().strftime("%H:%M:%S")
     debug_msg = f"[{timestamp}] USER:{user_id} HANDLER:{handler} | {message}"
     logger.debug(debug_msg)
-    print(f"🔍 {debug_msg}")
+    print(f"🔍 {debug_msg}")  # Также в консоль для удобства
 
 async def log_message_flow(message: types.Message, context: str):
     """Логирование потока сообщений"""

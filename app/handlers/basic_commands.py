@@ -1,18 +1,87 @@
 # app/handlers/basic_commands.py
 from aiogram import Router, F
-from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
-from app.services.user_service import UserService
+from aiogram.filters import CommandStart, Command
 from app.core.i18n import get_localization
 from app.keyboards.main_menu import get_main_menu_keyboard
-#from app.keyboards.inline_menus import get_profile_keyboard  
-from app.keyboards.promo_keyboards import get_premium_menu_keyboard
-from datetime import datetime, date  # ← ВЫНЕС ИМПОРТ В НАЧАЛО
+from app.keyboards.inline_menus import get_profile_keyboard, get_premium_menu_keyboard
+from app.utils.debug import debug_state, log_message_flow
+from datetime import datetime, date
 
 router = Router()
 
+@router.message(CommandStart())
+async def cmd_start(message: Message):
+    await log_message_flow(message, "START_COMMAND")
+    i18n = get_localization()
+    
+    await message.answer(
+        i18n.get_text("welcome_message"),
+        reply_markup=get_main_menu_keyboard()
+    )
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await log_message_flow(message, "HELP_COMMAND")
+    i18n = get_localization()
+    
+    await message.answer(
+        i18n.get_text("help_message"),
+        reply_markup=get_main_menu_keyboard()
+    )
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message):
+    await log_message_flow(message, "CANCEL_COMMAND")
+    i18n = get_localization()
+    await message.answer(
+        i18n.get_text('cancel_success'),
+        reply_markup=get_main_menu_keyboard()
+    )
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message):
+    """Команда для возврата в главное меню"""
+    await log_message_flow(message, "MENU_COMMAND")
+    await message.answer(
+        "🏠 Главное меню",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message):
+    await log_message_flow(message, "PROFILE_COMMAND")
+    await show_user_profile(message)
+
+# Обработчики для КОНКРЕТНЫХ кнопок главного меню
+@router.message(F.text == get_localization().get_button_text('analyze_food'))
+async def handle_analyze_food(message: Message):
+    await log_message_flow(message, "ANALYZE_FOOD_BUTTON")
+    i18n = get_localization()
+    from app.keyboards.analysis_menu import get_analysis_menu_keyboard
+    await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
+
+@router.message(F.text == get_localization().get_button_text('profile'))
+async def handle_profile(message: Message):
+    await log_message_flow(message, "PROFILE_BUTTON")
+    await cmd_profile(message)
+
+@router.message(F.text == get_localization().get_button_text('history'))
+async def handle_history(message: Message):
+    await log_message_flow(message, "HISTORY_BUTTON")
+    i18n = get_localization()
+    await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
+
+@router.message(F.text == get_localization().get_button_text('help'))
+async def handle_help(message: Message):
+    await log_message_flow(message, "HELP_BUTTON")
+    i18n = get_localization()
+    await message.answer(i18n.get_text('help_text'), reply_markup=get_main_menu_keyboard())
+
 async def show_user_profile(message: Message):
     """Функция для показа профиля пользователя (используется в других модулях)"""
+    await log_message_flow(message, "SHOW_PROFILE")
+    
     i18n = get_localization()
     user_id = message.from_user.id
     
@@ -59,78 +128,17 @@ async def show_user_profile(message: Message):
     
     await message.answer(profile_text, reply_markup=keyboard)
 
-@router.message(Command("start"))
-async def cmd_start(message: Message):
-    i18n = get_localization()
-    
-    await message.answer(
-        f"{i18n.get_text('start_welcome')}\n\n",
-        reply_markup=get_main_menu_keyboard()
-    )
-
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    i18n = get_localization()
-    await message.answer(
-        i18n.get_text('help_text'),
-        reply_markup=get_main_menu_keyboard()
-    )
-
-@router.message(Command("cancel"))
-async def cmd_cancel(message: Message):
-    i18n = get_localization()
-    await message.answer(
-        i18n.get_text('cancel_success'),
-        reply_markup=get_main_menu_keyboard()
-    )
-
-@router.message(Command("menu"))
-async def cmd_menu(message: Message):
-    """Команда для возврата в главное меню"""
-    await message.answer(
-        "🏠 Главное меню",
-        reply_markup=get_main_menu_keyboard()
-    )
-
-
-# Обработчики для КОНКРЕТНЫХ кнопок главного меню
-@router.message(F.text == get_localization().get_button_text('analyze_food'))
-async def handle_analyze_food(message: Message):
-    i18n = get_localization()
-    from app.keyboards.analysis_menu import get_analysis_menu_keyboard
-    await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
-
-@router.message(F.text == get_localization().get_button_text('profile'))
-async def handle_profile(message: Message):
-    await cmd_profile(message)
-
-@router.message(F.text == get_localization().get_button_text('history'))
-async def handle_history(message: Message):
-    i18n = get_localization()
-    await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
-
-@router.message(F.text == get_localization().get_button_text('help'))
-async def handle_help(message: Message):
-    i18n = get_localization()
-    await message.answer(i18n.get_text('help_text'), reply_markup=get_main_menu_keyboard())
-
-@router.message(F.text == get_localization().get_button_text('menu'))
-async def handle_menu(message: Message):
-    await cmd_menu(message)
-
-@router.message(Command("profile"))
-async def cmd_profile(message: Message):
-    await show_user_profile(message)
-
 # Обработчики callback-запросов для профиля
 @router.callback_query(F.data == "refresh_profile")
 async def refresh_profile(callback: CallbackQuery):
+    await log_message_flow(callback.message, "REFRESH_PROFILE_CALLBACK")
     await show_user_profile(callback.message)
     await callback.answer("✅ Профиль обновлен")
 
 # Обработчик для кнопки "Получить премиум"
 @router.callback_query(F.data == "get_premium")
 async def get_premium_handler(callback: CallbackQuery):
+    await log_message_flow(callback.message, "GET_PREMIUM_CALLBACK")
     i18n = get_localization()
     await callback.message.answer(
         i18n.get_text('premium_options'),
@@ -141,8 +149,22 @@ async def get_premium_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "main_menu")
 async def main_menu_handler(callback: CallbackQuery):
     """Обработчик возврата в главное меню"""
+    await log_message_flow(callback.message, "MAIN_MENU_CALLBACK")
     await callback.message.answer(
         "🏠 Главное меню",
         reply_markup=get_main_menu_keyboard()
     )
     await callback.answer()
+
+
+@router.message()
+async def handle_unknown(message: Message):
+    """Обрабатывает все сообщения, которые не были обработаны другими хендлерами"""
+    await log_message_flow(message, "UNHANDLED_MESSAGE")
+    await debug_state(message.from_user.id, "UNHANDLED", f"Text: '{message.text}'")
+    
+    i18n = get_localization()
+    await message.answer(
+        "Не понимаю эту команду. Используйте кнопки меню ниже:",
+        reply_markup=get_main_menu_keyboard()
+    )

@@ -2,7 +2,7 @@
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 from typing import Callable, Dict, Any, Awaitable
-from app.services.session_service import session_service
+from app.services.gpt_analyzer import GPTAnalyzer
 from app.utils.debug import debug_state
 
 class StateValidationMiddleware(BaseMiddleware):
@@ -19,11 +19,12 @@ class StateValidationMiddleware(BaseMiddleware):
             await debug_state(user_id, "MIDDLEWARE", f"Command: {event.text} - passing through")
             return await handler(event, data)
         
-        # Если пользователь в сессии анализа и это текст - обрабатываем как уточнение
+        # Если пользователь имеет активную сессию GPT и это текст - обрабатываем как уточнение
+        gpt_analyzer = GPTAnalyzer()
         if (event.text and 
-            session_service.is_user_in_analysis(user_id)):
+            gpt_analyzer.has_active_session(user_id)):
             
-            await debug_state(user_id, "MIDDLEWARE", f"Text in analysis session: '{event.text}' - redirecting to analysis")
+            await debug_state(user_id, "MIDDLEWARE", f"Text in GPT session: '{event.text}' - redirecting to analysis")
             
             # Импортируем здесь чтобы избежать циклических импортов
             from app.handlers.photo_handler import handle_analysis_text
