@@ -42,35 +42,30 @@ async def cmd_menu(message: Message):
     )
 
 
-# Обработчик для кнопок главного меню
-@router.message(F.text)
-async def handle_main_menu_buttons(message: Message):
+# Обработчики для КОНКРЕТНЫХ кнопок главного меню
+@router.message(F.text == get_localization().get_button_text('analyze_food'))
+async def handle_analyze_food(message: Message):
     i18n = get_localization()
-    text = message.text
-    
-    # Получаем тексты кнопок из локализации
-    analyze_text = i18n.get_button_text('analyze_food')
-    profile_text = i18n.get_button_text('profile')
-    history_text = i18n.get_button_text('history')
-    help_text = i18n.get_button_text('help')
-    menu_text = i18n.get_button_text('menu')
-    
-    if text == analyze_text:
-        from app.keyboards.analysis_menu import get_analysis_menu_keyboard
-        await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
-    elif text == profile_text:
-        await cmd_profile(message)
-    elif text == history_text:
-        await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
-    elif text == help_text:
-        await message.answer(
-            i18n.get_text('help_text'),
-            reply_markup=get_main_menu_keyboard()
-        )
-    elif text == menu_text:
-        await cmd_menu(message)
-    # else: не обрабатываем - пропускаем к другим обработчикам
+    from app.keyboards.analysis_menu import get_analysis_menu_keyboard
+    await message.answer(i18n.get_text('send_photo_for_analysis'), reply_markup=get_analysis_menu_keyboard())
 
+@router.message(F.text == get_localization().get_button_text('profile'))
+async def handle_profile(message: Message):
+    await cmd_profile(message)
+
+@router.message(F.text == get_localization().get_button_text('history'))
+async def handle_history(message: Message):
+    i18n = get_localization()
+    await message.answer(i18n.get_text('history_development'), reply_markup=get_main_menu_keyboard())
+
+@router.message(F.text == get_localization().get_button_text('help'))
+async def handle_help(message: Message):
+    i18n = get_localization()
+    await message.answer(i18n.get_text('help_text'), reply_markup=get_main_menu_keyboard())
+
+@router.message(F.text == get_localization().get_button_text('menu'))
+async def handle_menu(message: Message):
+    await cmd_menu(message)
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
     i18n = get_localization()

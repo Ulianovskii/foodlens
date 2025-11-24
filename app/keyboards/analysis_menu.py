@@ -12,7 +12,7 @@ def get_analysis_menu_keyboard():
         KeyboardButton(text=i18n.get_button_text("nutrition")),
         KeyboardButton(text=i18n.get_button_text("recipe")),
         KeyboardButton(text=i18n.get_button_text("new_photo")),
-        KeyboardButton(text=i18n.get_button_text("menu"))  # ← ИСПОЛЬЗУЕМ ЛОКАЛИЗАЦИЮ
+        KeyboardButton(text=i18n.get_button_text("menu"))  # Используем локализацию
     )
     
     builder.adjust(2)
