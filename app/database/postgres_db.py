@@ -1,4 +1,4 @@
-# app/database/postgres_db.py v1
+# app/database/postgres_db.py v1 - ИСПРАВЛЕННАЯ
 from typing import Optional, Dict, Any
 import asyncpg
 import os
@@ -17,10 +17,17 @@ class Database:
         return self._pool
     
     async def init_db(self):
-        """Инициализация таблиц (миграции через Docker)"""
-        pool = await self.get_pool()
-        # Таблицы создаются через миграции в Docker
-        logger.info("База данных инициализирована")
+        """Проверка подключения к БД и инициализация"""
+        try:
+            pool = await self.get_pool()
+            async with pool.acquire() as conn:
+                # Проверяем что таблица существует
+                await conn.execute("SELECT 1 FROM users LIMIT 1")
+            logger.info("✅ База данных подключена и готова к работе")
+        except Exception as e:
+            logger.error(f"❌ Ошибка инициализации БД: {e}")
+            # Если таблицы нет - создаем (на время разработки)
+            await self._create_tables()
     
     async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Возвращает сырые данные пользователя как словарь"""
@@ -64,3 +71,28 @@ class Database:
                 user_data['custom_photo_limit'],
                 user_data['custom_text_limit']
             ))
+    
+    async def _create_tables(self):
+        """Создание таблиц если их нет"""  # ← ДОБАВЛЕН ОТСТУП!
+        try:
+            pool = await self.get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        language VARCHAR(10) DEFAULT 'ru',
+                        subscription_type VARCHAR(20) DEFAULT 'free',
+                        subscription_until TIMESTAMP WITH TIME ZONE,
+                        daily_photos_used INTEGER DEFAULT 0,
+                        daily_texts_used INTEGER DEFAULT 0,
+                        last_reset_date DATE,
+                        custom_photo_limit INTEGER,
+                        custom_text_limit INTEGER,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                ''')
+                logger.info("✅ Таблица users создана")
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания таблиц: {e}")
+            raise

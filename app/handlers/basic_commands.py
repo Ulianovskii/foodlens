@@ -2,56 +2,33 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
-from app.core.i18n import get_localization
-from app.keyboards.main_menu import get_main_menu_keyboard
+from app.core.i18n import get_text
 
-basic_router = Router()
+router = Router()
 
-@basic_router.message(Command("start"))
-async def cmd_start(message: Message):
-    """Обработчик команды /start"""
-    i18n = get_localization()
-    await message.answer(
-        i18n.get_text("start_welcome"),
-        reply_markup=get_main_menu_keyboard()
+@router.message(Command("start"))
+async def cmd_start(message: Message, user_service):  # ← ДОБАВИТЬ user_service
+    user_id = message.from_user.id
+    
+    # Создаем/получаем пользователя
+    user = await user_service.get_or_create_user(user_id)
+    
+    text = get_text(user_id, 'start')
+    await message.answer(text)
+
+@router.message(Command("limits"))
+async def cmd_limits(message: Message, user_service):  # ← ДОБАВИТЬ user_service
+    user_id = message.from_user.id
+    limits_info = await user_service.get_user_limits_info(user_id)
+    
+    status = get_text(user_id, 'premium_active' if limits_info['is_premium'] else 'free_tier')
+    
+    text = get_text(user_id, 'limits_info').format(
+        photos_used=limits_info['photos_used'],
+        photos_limit=limits_info['photos_limit'],
+        texts_used=limits_info['texts_used'],
+        texts_limit=limits_info['texts_limit'],
+        status=status
     )
-
-@basic_router.message(Command("help"))
-async def cmd_help(message: Message):
-    """Обработчик команды /help"""
-    i18n = get_localization()
-    await message.answer(i18n.get_text("help_text"))
-
-@basic_router.message(Command("cancel"))
-async def cmd_cancel(message: Message):
-    """Обработчик команды /cancel"""
-    i18n = get_localization()
-    await message.answer(
-        i18n.get_text("cancel_no_action"),
-        reply_markup=get_main_menu_keyboard()
-    )
-
-@basic_router.message(Command("history"))
-async def cmd_history(message: Message):
-    """Обработчик команды /history"""
-    i18n = get_localization()
-    await message.answer(i18n.get_text("history_development"))
-
-# Добавляем обработчики для кнопок главного меню
-@basic_router.message(F.text == "❓ Помощь")
-async def button_help(message: Message):
-    """Обработчик кнопки помощи"""
-    i18n = get_localization()
-    await message.answer(i18n.get_text("help_text"))
-
-@basic_router.message(F.text == "📊 Журнал")
-async def button_history(message: Message):
-    """Обработчик кнопки журнала"""
-    i18n = get_localization()
-    await message.answer(i18n.get_text("history_development"))
-
-@basic_router.message(F.text == "👤 Профиль")
-async def button_profile(message: Message):
-    """Обработчик кнопки профиля"""
-    i18n = get_localization()
-    await message.answer(i18n.get_text("profile_development"))
+    
+    await message.answer(text)

@@ -1,4 +1,38 @@
-.PHONY: run stop restart logs install venv clean check-env setup help test test-gpt test-bot test-coverage test-api
+.PHONY: run stop restart logs install venv clean check-env setup help test test-gpt test-bot test-coverage test-api docker-up docker-down docker-logs docker-db
+
+# Docker команды
+docker-up:
+	docker-compose up -d
+	@echo "✅ Docker контейнеры запущены"
+
+docker-down:
+	docker-compose down
+	@echo "✅ Docker контейнеры остановлены"
+
+docker-logs:
+	docker-compose logs -f postgres
+
+docker-db:
+	docker-compose exec postgres psql -U foodlens_user -d foodlens
+
+# Запуск бота с проверкой Docker
+run: check-env check-venv check-docker
+	source venv/bin/activate && python -m app.bot
+
+# Проверка Docker
+check-docker:
+	@if ! docker-compose ps | grep -q "Up"; then \
+		echo "🐳 Запускаем Docker контейнеры..."; \
+		docker-compose up -d; \
+		sleep 5; \
+	fi
+	@echo "✅ Docker контейнеры запущены"
+
+# Полный запуск (Docker + бот)
+start: docker-up run
+
+# Остановка всего
+stop-all: stop docker-down
 
 # Создание и настройка виртуального окружения
 setup:

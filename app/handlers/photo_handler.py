@@ -38,10 +38,23 @@ async def cmd_analyze(message: Message, state: FSMContext):
 
 # ===== ЗАГРУЗКА ФОТО С ПОДПИСЬЮ ИЛИ БЕЗ =====
 @food_photo_router.message(PhotoAnalysis.waiting_for_photo, F.photo)
-async def handle_photo_with_caption(message: Message, state: FSMContext):
+async def handle_photo_with_caption(message: Message, state: FSMContext, user_service):  # ← ДОБАВИЛ user_service
     """Обрабатывает загрузку фото с подписью или без"""
     try:
         i18n = get_localization()
+        user_id = message.from_user.id
+        
+        # 🔒 ПРОВЕРКА ЛИМИТОВ - ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ!
+        if not await user_service.increment_photo_counter(user_id):
+            # Лимит исчерпан
+            limits_info = await user_service.get_user_limits_info(user_id)
+            text = i18n.get_text("limit_exceeded").format(
+                used=limits_info['photos_used'],
+                limit=limits_info['photos_limit']
+            )
+            await message.answer(text, reply_markup=get_main_menu_keyboard())
+            await state.clear()
+            return
         
         # Получаем фото (самое качественное)
         photo = message.photo[-1]
@@ -156,9 +169,9 @@ async def handle_menu(message: Message, state: FSMContext):
 
 # ===== ОБРАБОТКА ФОТО БЕЗ КОМАНДЫ (с подписью или без) =====
 @food_photo_router.message(F.photo)
-async def handle_photo_direct(message: Message, state: FSMContext):
+async def handle_photo_direct(message: Message, state: FSMContext, user_service):  # ← ДОБАВИЛ user_service
     """Обрабатывает фото отправленное без команды"""
-    await handle_photo_with_caption(message, state)
+    await handle_photo_with_caption(message, state, user_service)  # ← ПЕРЕДАЛ user_service
 
 # ===== ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ БЕЗ АКТИВНОЙ СЕССИИ =====
 @food_photo_router.message(F.text)

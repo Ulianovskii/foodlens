@@ -1,3 +1,4 @@
+# app/bot.py - ИСПРАВЛЕННАЯ
 import os
 import logging
 import asyncio
@@ -7,17 +8,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.handlers import router
 from app.locales.base import localization_manager
+from app.database import Database  # ← ДОБАВИТЬ
+from app.services import UserService  # ← ДОБАВИТЬ
 
-async def main():
-    # Инициализация БД
-    database = Database(os.getenv('DATABASE_URL'))
-    await database.init_db()
-    
-    # Инициализация сервисов
-    user_service = UserService(database)
-    
-    # Запуск бота с зависимостями
-    await dp.start_polling(bot, user_service=user_service)
 
 def setup_logging():
     """Настройка логирования"""
@@ -55,13 +48,28 @@ async def main():
     
     logger.info(f"Токен бота: {bot_token[:10]}...")  # Логируем часть токена для проверки
     
+    # Инициализация БД и сервисов
+    try:
+        database = Database(os.getenv('DATABASE_URL'))
+        await database.init_db()  # ← ИНИЦИАЛИЗАЦИЯ БД
+        logger.info("✅ База данных инициализирована")
+        
+        user_service = UserService(database)  # ← СОЗДАНИЕ СЕРВИСА
+        logger.info("✅ Сервисы инициализированы")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации БД: {e}")
+        return
+    
     # Инициализация бота и диспетчера
     try:
         bot = Bot(token=bot_token)
         logger.info("Бот инициализирован")
         
         storage = MemoryStorage()
-        dp = Dispatcher(storage=storage)
+        
+        # Создаем диспетчер и передаем сервисы
+        dp = Dispatcher(storage=storage, user_service=user_service)  # ← ПЕРЕДАЕМ СЕРВИСЫ
         logger.info("Диспетчер инициализирован")
         
         # Регистрация роутера с обработчиками
