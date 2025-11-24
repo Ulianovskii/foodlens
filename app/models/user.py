@@ -1,3 +1,4 @@
+#app/models/user.py
 from datetime import datetime, date
 from enum import Enum
 from typing import Optional
@@ -31,6 +32,15 @@ class User:
         self.last_reset_date = last_reset_date or date.today()
         self.username = username
         
+    def get_daily_limit(self) -> int:
+        """Возвращает дневной лимит в зависимости от подписки"""
+        if self.subscription_type in ["premium_week", "premium_month"]:
+            return 10
+        return 3
+    
+    def can_analyze_photo(self) -> bool:
+        """Может ли пользователь анализировать фото"""
+        return self.daily_photos_used < self.get_daily_limit()
     
     @classmethod
     def from_dict(cls, data: dict) -> 'User':

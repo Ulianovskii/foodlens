@@ -1,3 +1,4 @@
+# app/handlers/admin_handlers.py
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -6,19 +7,44 @@ from app.services.promo_service import PromoService
 from app.core.i18n import get_localization
 from app.keyboards.admin_keyboards import get_admin_panel_keyboard
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Получаем ID админов из .env
-ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_USER_IDS', '').split(',') if id.strip()]
+ADMIN_IDS_STR = os.getenv('ADMIN_USER_IDS', '')
+ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(',') if id.strip()]
+
+# ДОБАВЬ ЭТОТ ОТЛАДОЧНЫЙ ВЫВОД
+logger.info(f"🔧 Загружены ADMIN_IDS: {ADMIN_IDS} из строки: '{ADMIN_IDS_STR}'")
 
 admin_router = Router()
 
 def admin_required(handler):
-    """Декоратор для проверки прав администратора"""
+    """Декоратор для проверки прав администратора для Message"""
     async def wrapper(message: Message, *args, **kwargs):
-        if message.from_user.id not in ADMIN_IDS:
-            await message.answer("⛔️ Команда доступна только администраторам")
+        user_id = message.from_user.id
+        logger.info(f"🔧 Проверка прав админа для пользователя {user_id}, ADMIN_IDS: {ADMIN_IDS}")
+        
+        if user_id not in ADMIN_IDS:
+            logger.warning(f"⛔️ Отказано в доступе пользователю {user_id}")
+            i18n = get_localization()
+            await message.answer(i18n.get_text('admin_access_denied'))
             return
+        logger.info(f"✅ Доступ разрешен пользователю {user_id}")
         return await handler(message, *args, **kwargs)
+    return wrapper
+
+def admin_callback_required(handler):
+    """Декоратор для проверки прав администратора для CallbackQuery"""
+    async def wrapper(callback: CallbackQuery, *args, **kwargs):
+        user_id = callback.from_user.id
+        if user_id not in ADMIN_IDS:
+            logger.warning(f"⛔️ Отказано в доступе пользователю {user_id} для callback")
+            i18n = get_localization()
+            await callback.answer(i18n.get_text('admin_access_denied'), show_alert=True)
+            return
+        return await handler(callback, *args, **kwargs)
     return wrapper
 
 # ===== ТЕКСТОВЫЕ КОМАНДЫ =====
@@ -28,16 +54,17 @@ def admin_required(handler):
 async def cmd_generate_promo(message: Message):
     """Генерация промокода: /generate_promo week 1"""
     try:
+        i18n = get_localization()
         parts = message.text.split()
         if len(parts) != 3:
-            await message.answer("❌ Использование: /generate_promo <week|month> <количество>")
+            await message.answer(i18n.get_text('admin_generate_promo_usage'))
             return
         
         promo_type = parts[1]
         count = int(parts[2])
         
         if promo_type not in ['week', 'month']:
-            await message.answer("❌ Тип промокода должен быть 'week' или 'month'")
+            await message.answer(i18n.get_text('admin_invalid_promo_type'))
             return
         
         # Получаем сервисы из контекста бота
@@ -64,6 +91,7 @@ async def cmd_generate_promo(message: Message):
 async def cmd_reset_limits(message: Message):
     """Сброс лимитов пользователя: /reset_limits [user_id]"""
     try:
+        i18n = get_localization()
         parts = message.text.split()
         user_id = int(parts[1]) if len(parts) > 1 else message.from_user.id
         
@@ -72,9 +100,9 @@ async def cmd_reset_limits(message: Message):
         
         if user:
             await user_service.reset_daily_limits(user_id)
-            await message.answer(f"✅ Лимиты пользователя {user_id} сброшены")
+            await message.answer(i18n.get_text('admin_limits_reset', user_id=user_id))
         else:
-            await message.answer("❌ Пользователь не найден")
+            await message.answer(i18n.get_text('admin_user_not_found'))
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
@@ -84,12 +112,13 @@ async def cmd_reset_limits(message: Message):
 async def cmd_reset_subscription(message: Message):
     """Сброс подписки пользователя: /reset_sub [user_id]"""
     try:
+        i18n = get_localization()
         parts = message.text.split()
         user_id = int(parts[1]) if len(parts) > 1 else message.from_user.id
         
         user_service = UserService(message.bot.user_service.database)
         await user_service.update_subscription(user_id, "free")
-        await message.answer(f"✅ Подписка пользователя {user_id} сброшена")
+        await message.answer(i18n.get_text('admin_subscription_reset', user_id=user_id))
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
@@ -106,7 +135,8 @@ async def cmd_user_info(message: Message):
         user = await user_service.get_user(user_id)
         
         if not user:
-            await message.answer("❌ Пользователь не найден")
+            i18n = get_localization()
+            await message.answer(i18n.get_text('admin_user_not_found'))
             return
         
         subscription_info = "нет"
@@ -133,11 +163,12 @@ Username: @{user.username or 'нет'}
 async def cmd_promo_list(message: Message):
     """Список активных промокодов"""
     try:
+        i18n = get_localization()
         promo_service = PromoService(message.bot.user_service.database)
         promos = await promo_service.get_all_promo_codes()
         
         if not promos:
-            await message.answer("📭 Нет промокодов")
+            await message.answer(i18n.get_text('admin_no_promos'))
             return
         
         response = "🎁 Все промокоды:\n\n"
@@ -155,9 +186,10 @@ async def cmd_promo_list(message: Message):
 async def cmd_activate_promo(message: Message):
     """Активировать промокод для пользователя: /activate_promo CODE [user_id]"""
     try:
+        i18n = get_localization()
         parts = message.text.split()
         if len(parts) < 2:
-            await message.answer("❌ Использование: /activate_promo <код> [user_id]")
+            await message.answer(i18n.get_text('admin_activate_promo_usage'))
             return
         
         code = parts[1]
@@ -167,35 +199,35 @@ async def cmd_activate_promo(message: Message):
         user = await user_service.get_user(user_id)
         
         if not user:
-            await message.answer("❌ Пользователь не найден")
+            await message.answer(i18n.get_text('admin_user_not_found'))
             return
         
         promo_service = PromoService(message.bot.user_service.database)
         success = await promo_service.activate_promo_code(code, user)
         
         if success:
-            await message.answer(f"✅ Промокод {code} активирован для пользователя {user_id}")
+            await message.answer(i18n.get_text('admin_promo_activated', code=code, user_id=user_id))
         else:
-            await message.answer("❌ Неверный или уже использованный промокод")
+            await message.answer(i18n.get_text('admin_invalid_promo'))
             
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
 # ===== ИНТЕРАКТИВНАЯ АДМИН-ПАНЕЛЬ =====
 
-@admin_router.message(Command("admin"))
+@admin_router.message(Command("superadmin"))
 @admin_required
 async def admin_panel(message: Message):
     """Интерактивная админ-панель"""
     i18n = get_localization()
     
     await message.answer(
-        i18n.get_text('admin_actions'), 
+        "🛠️ Админ-панель\n\nВыберите действие:", 
         reply_markup=get_admin_panel_keyboard()
     )
 
 @admin_router.callback_query(F.data.startswith("admin_"))
-@admin_required
+@admin_callback_required
 async def admin_actions(callback: CallbackQuery):
     """Обработка действий из админ-панели"""
     i18n = get_localization()
@@ -211,13 +243,12 @@ async def admin_actions(callback: CallbackQuery):
     elif action == "admin_set_premium":
         from datetime import datetime, timedelta
         subscription_until = datetime.now() + timedelta(days=30)
-        await user_service.update_subscription(user_id, "premium", subscription_until)
+        await user_service.update_subscription(user_id, "premium_month", subscription_until)
         await callback.answer("✅ Установлен премиум тариф на 30 дней")
     
     elif action == "admin_reset_limits":
         await user_service.reset_daily_limits(user_id)
         await callback.answer("✅ Лимиты сброшены")
     
-    # Показываем обновленный профиль
-    from app.handlers.basic_commands import cmd_profile
-    await cmd_profile(callback.message)
+    # Обновляем сообщение с кнопками
+    await callback.message.edit_reply_markup(reply_markup=get_admin_panel_keyboard())

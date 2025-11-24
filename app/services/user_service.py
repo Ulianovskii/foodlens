@@ -1,3 +1,4 @@
+#app/services/user_service.py
 from app.models.user import User
 from datetime import datetime, date
 import logging
@@ -45,6 +46,7 @@ class UserService:
         # Проверяем нужно ли сбросить счетчики
         await self._reset_daily_counters_if_needed(user)
         
+        # Проверяем лимит ПОСЛЕ сброса счетчиков
         if not user.can_analyze_photo():
             return False
             

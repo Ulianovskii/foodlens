@@ -1,3 +1,4 @@
+# app/bot.py
 import os
 import logging
 import asyncio
@@ -5,7 +6,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.handlers import router  # ← здесь уже включены ВСЕ роутеры
+from app.handlers import router  # ← здесь уже включены ВСЕ роутеры (включая админ)
 from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
@@ -81,8 +82,14 @@ async def main():
         logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
+        # УБИРАЕМ dp.include_router(admin_router) - он уже в основном роутере
         dp.include_router(router)  # ← ТОЛЬКО ОДИН РОУТЕР, в нем уже все включено
         logger.info("✅ Все роутеры зарегистрированы")
+
+        # ДОБАВЬ ЭТУ ПРОВЕРКУ ПЕРЕД запуском polling
+        from app.handlers.admin_handlers import ADMIN_IDS
+        print(f"🔧 DEBUG: ADMIN_IDS из admin_handlers: {ADMIN_IDS}")
+    
 
         # Получаем информацию о боте
         bot_info = await bot.get_me()
@@ -91,6 +98,8 @@ async def main():
         # Запуск опроса
         logger.info("Начинаем опрос...")
         await dp.start_polling(bot)
+
+        
         
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")

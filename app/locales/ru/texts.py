@@ -1,3 +1,4 @@
+#app/locales/ru/texts.py
 from app.locales.base import BaseLocalization
 
 
@@ -199,6 +200,16 @@ class RussianLocalization(BaseLocalization):
             'admin_sub_toggle_premium': "🔄 Переключить на премиум тариф",
             'admin_reset_limits': "🔄 Сбросить лимиты",
             'admin_actions': "⚙️ <b>Админ действия</b>",
+            'admin_access_denied': "⛔️ Команда доступна только администраторам",
+            'admin_generate_promo_usage': "❌ Использование: /generate_promo <week|month> <количество>",
+            'admin_invalid_promo_type': "❌ Тип промокода должен быть 'week' или 'month'",
+            'admin_user_not_found': "❌ Пользователь не найден",
+            'admin_limits_reset': "✅ Лимиты пользователя {user_id} сброшены",
+            'admin_subscription_reset': "✅ Подписка пользователя {user_id} сброшена",
+            'admin_activate_promo_usage': "❌ Использование: /activate_promo <код> [user_id]",
+            'admin_promo_activated': "✅ Промокод {code} активирован для пользователя {user_id}",
+            'admin_invalid_promo': "❌ Неверный или уже использованный промокод",
+            'admin_no_promos': "📭 Нет промокодов",
             
             # ===== ОБЩИЕ СООБЩЕНИЯ =====
             'feature_development': "🛠 Эта функция находится в разработке",
