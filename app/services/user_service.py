@@ -1,4 +1,4 @@
-# app/services/user_service.py
+# app/services/user_service.py - ИСПРАВЛЕННЫЙ
 from app.models.user import User
 from datetime import datetime, date
 import logging
@@ -28,8 +28,14 @@ class UserService:
     
     async def save_user(self, user: User):
         """Сохраняет User объект в БД"""
-        user_data = user.to_dict()
-        await self.database.save_user(user_data)
+        try:
+            user_data = user.to_dict()
+            print(f"DEBUG: user_data type: {type(user_data)}")  # ← ДОБАВИТЬ
+            print(f"DEBUG: user_data keys: {user_data.keys() if isinstance(user_data, dict) else 'NOT DICT'}")  # ← ДОБАВИТЬ
+            await self.database.save_user(user_data)
+        except Exception as e:
+            logger.error(f"Ошибка в save_user: {e}")
+            raise
     
     async def increment_photo_counter(self, user_id: int) -> bool:
         """Увеличить счетчик фото и проверить лимит"""

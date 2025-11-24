@@ -29,7 +29,8 @@ class Database:
             # Если таблицы нет - создаем (на время разработки)
             await self._create_tables()
     
-    async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+    # app/database/postgres_db.py - исправить метод get_user
+    async def get_user(self, user_id: int) -> Optional[dict]:
         """Возвращает сырые данные пользователя как словарь"""
         pool = await self.get_pool()
         async with pool.acquire() as conn:
@@ -39,37 +40,37 @@ class Database:
             )
             return dict(row) if row else None
     
-    async def save_user(self, user_data: Dict[str, Any]):
-        """Сохраняет данные пользователя из словаря"""
+   # app/database/postgres_db.py - ИСПРАВЛЕННЫЙ метод save_user
+    async def save_user(self, user_data: dict):
         pool = await self.get_pool()
         async with pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO users 
                 (user_id, created_at, language, subscription_type, 
-                 subscription_until, daily_photos_used, daily_texts_used,
-                 last_reset_date, custom_photo_limit, custom_text_limit)
+                subscription_until, daily_photos_used, daily_texts_used,
+                last_reset_date, custom_photo_limit, custom_text_limit)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (user_id) DO UPDATE SET
-                    language = $3,
-                    subscription_type = $4,
-                    subscription_until = $5,
-                    daily_photos_used = $6,
-                    daily_texts_used = $7,
-                    last_reset_date = $8,
-                    custom_photo_limit = $9,
-                    custom_text_limit = $10,
+                    language = EXCLUDED.language,
+                    subscription_type = EXCLUDED.subscription_type,
+                    subscription_until = EXCLUDED.subscription_until,
+                    daily_photos_used = EXCLUDED.daily_photos_used,
+                    daily_texts_used = EXCLUDED.daily_texts_used,
+                    last_reset_date = EXCLUDED.last_reset_date,
+                    custom_photo_limit = EXCLUDED.custom_photo_limit,
+                    custom_text_limit = EXCLUDED.custom_text_limit,
                     updated_at = NOW()
             ''', (
-                user_data['user_id'], 
-                user_data['created_at'], 
-                user_data['language'],
-                user_data['subscription_type'], 
-                user_data['subscription_until'],
-                user_data['daily_photos_used'], 
-                user_data['daily_texts_used'],
-                user_data['last_reset_date'], 
-                user_data['custom_photo_limit'],
-                user_data['custom_text_limit']
+                user_data.get('user_id'), 
+                user_data.get('created_at'), 
+                user_data.get('language', 'ru'),
+                user_data.get('subscription_type', 'free'), 
+                user_data.get('subscription_until'),
+                user_data.get('daily_photos_used', 0), 
+                user_data.get('daily_texts_used', 0),
+                user_data.get('last_reset_date'), 
+                user_data.get('custom_photo_limit'),
+                user_data.get('custom_text_limit')
             ))
     
     async def _create_tables(self):
