@@ -1,10 +1,12 @@
+#app/handlers/basic_commands.py
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from app.services.user_service import UserService
 from app.core.i18n import get_localization
 from app.keyboards.main_menu import get_main_menu_keyboard
-from app.keyboards.inline_menus import get_profile_keyboard, get_premium_menu_keyboard
+from app.keyboards.inline_menus import get_profile_keyboard
+from app.keyboards.promo_keyboards import get_premium_menu_keyboard  # ← ИЗМЕНИЛ ИМПОРТ
 
 router = Router()
 
@@ -82,25 +84,32 @@ async def cmd_profile(message: Message):
     user = await user_service.get_user(user_id)
     
     if not user:
-        await message.answer("Пользователь не найден")
-        return
+        # Если пользователя нет - создаем его
+        from app.models.user import User
+        from datetime import datetime, date
+        user = User(
+            user_id=user_id,
+            username=message.from_user.username,
+            created_at=datetime.now(),
+            last_reset_date=date.today()
+        )
+        await user_service.save_user(user)
+        # Теперь получаем созданного пользователя
+        user = await user_service.get_user(user_id)
     
-        
     # Определяем тип подписки
     is_premium = user.subscription_type == "premium"
     daily_limit = 10 if is_premium else 3
     remaining = daily_limit - user.daily_photos_used
     
-    # Формируем текст профиля
+    # Формируем текст профиля с локализацией
     profile_text = f"""
-{i18n.get_text('profile_title')}
-
-{i18n.get_text('profile_id', user_id=user_id)}
-{i18n.get_text('profile_subscription_premium') if is_premium else i18n.get_text('profile_subscription_free')}
+{i18n.get_text('profile_subscription_premium' if is_premium else 'profile_subscription_free')}
+{ i18n.get_text('profile_premium_until', date=user.subscription_until.strftime('%d.%m.%Y')) if is_premium and user.subscription_until else ''}
 {i18n.get_text('profile_used_today', used=user.daily_photos_used, limit=daily_limit)}
 {i18n.get_text('profile_remaining', remaining=remaining)}
 
-{i18n.get_text('your_features_title') if is_premium else i18n.get_text('premium_features_title')}
+{i18n.get_text('your_features_title' if is_premium else 'premium_features_title')}
 {i18n.get_text('premium_features_list')}
 """
     
@@ -114,18 +123,45 @@ async def cmd_profile(message: Message):
 @router.callback_query(F.data == "refresh_profile")
 async def refresh_profile(callback: CallbackQuery):
     # Получаем user_service из бота
-    user_service = getattr(message.bot, 'user_service', None)
+    user_service = getattr(callback.bot, 'user_service', None)
     
     if not user_service:
         await callback.answer("❌ Сервис недоступен")
         return
         
     user_id = callback.from_user.id
-    user = await user_service.get_user(user_id)  # ← ИСПРАВЛЕНО: get_user вместо get_or_create_user
+    user = await user_service.get_user(user_id)
     
     if not user:
-        await callback.answer("❌ Пользователь не найден")
-        return
+        # Создаем пользователя если не найден
+        from app.models.user import User
+        from datetime import datetime, date
+        user = User(
+            user_id=user_id,
+            username=callback.from_user.username,
+            created_at=datetime.now(),
+            last_reset_date=date.today()
+        )
+        await user_service.save_user(user)
         
     await cmd_profile(callback.message)
     await callback.answer("✅ Профиль обновлен")
+
+# Обработчик для кнопки "Получить премиум"
+@router.callback_query(F.data == "get_premium")
+async def get_premium_handler(callback: CallbackQuery):
+    i18n = get_localization()
+    await callback.message.answer(
+        i18n.get_text('premium_options'),
+        reply_markup=get_premium_menu_keyboard()
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "main_menu")
+async def main_menu_handler(callback: CallbackQuery):
+    """Обработчик возврата в главное меню"""
+    await callback.message.answer(
+        "🏠 Главное меню",
+        reply_markup=get_main_menu_keyboard()
+    )
+    await callback.answer()

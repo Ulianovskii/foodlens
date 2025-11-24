@@ -1,10 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from app.services.user_service import UserService
 from app.services.promo_service import PromoService
-from app.services.limit_service import LimitService
 from app.core.i18n import get_localization
+from app.keyboards.admin_keyboards import get_admin_panel_keyboard
 import os
 
 # Получаем ID админов из .env
@@ -189,13 +189,10 @@ async def admin_panel(message: Message):
     """Интерактивная админ-панель"""
     i18n = get_localization()
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=i18n.get_text('admin_sub_toggle_free'), callback_data="admin_set_free")],
-        [InlineKeyboardButton(text=i18n.get_text('admin_sub_toggle_premium'), callback_data="admin_set_premium")],
-        [InlineKeyboardButton(text=i18n.get_text('admin_reset_limits'), callback_data="admin_reset_limits")]
-    ])
-    
-    await message.answer(i18n.get_text('admin_actions'), reply_markup=keyboard)
+    await message.answer(
+        i18n.get_text('admin_actions'), 
+        reply_markup=get_admin_panel_keyboard()
+    )
 
 @admin_router.callback_query(F.data.startswith("admin_"))
 @admin_required

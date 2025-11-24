@@ -2,7 +2,6 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message
 from typing import Callable, Dict, Any, Awaitable
 from app.services.user_service import UserService
-from app.services.limit_service import LimitService
 from app.core.i18n import get_localization
 import logging
 
@@ -20,26 +19,38 @@ class LimitMiddleware(BaseMiddleware):
         if not event.photo:
             return await handler(event, data)
 
-        # Получаем user_service из data
-        user_service: UserService = data.get('user_service')
-        if not user_service:
-            return await handler(event, data)
-
         try:
+            # Получаем user_service из бота (а не из data)
+            user_service = getattr(event.bot, 'user_service', None)
+            if not user_service:
+                logger.error("user_service не найден в боте")
+                return await handler(event, data)
+
             user_id = event.from_user.id
             
-            # Получаем или создаем пользователя
-            user_data = await user_service.get_or_create_user(user_id)
+            # Получаем пользователя (используем get_user вместо get_or_create_user)
+            user = await user_service.get_user(user_id)
+            if not user:
+                # Если пользователя нет, создаем его через save_user
+                from app.models.user import User
+                from datetime import datetime, date
+                user = User(
+                    user_id=user_id,
+                    username=event.from_user.username,
+                    created_at=datetime.now(),
+                    last_reset_date=date.today()
+                )
+                await user_service.save_user(user)
             
-            # Создаем объект User из данных
-            from app.models.user import User
-            user = User.from_dict(user_data)
+            # Проверяем может ли пользователь анализировать фото
+            if not user.can_analyze_photo():
+                i18n = get_localization()
+                await event.answer(i18n.get_text('daily_limit_exceeded'))
+                return
             
-            # Создаем limit_service и проверяем лимиты
-            limit_service = LimitService(user_service.database)
-            can_proceed = await limit_service.check_and_increment_usage(user)
-            
-            if not can_proceed:
+            # Увеличиваем счетчик фото
+            success = await user_service.increment_photo_counter(user)
+            if not success:
                 i18n = get_localization()
                 await event.answer(i18n.get_text('daily_limit_exceeded'))
                 return

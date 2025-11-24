@@ -5,17 +5,13 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.handlers import router
+from app.handlers import router  # ← здесь уже включены ВСЕ роутеры
 from app.locales.base import localization_manager
 from app.database import Database
 from app.services import UserService
-from app.handlers import promo_handlers
-
-from app.handlers.admin_handlers import admin_router
 
 # Импорты для middleware
 from app.middlewares.limit_middleware import LimitMiddleware
-from app.handlers.photo_handler import router as food_photo_router
 
 
 def setup_logging():
@@ -60,7 +56,7 @@ async def main():
         await database.init_db()
         logger.info("✅ База данных инициализирована")
         
-        user_service = UserService(database)  # ← СОЗДАЕМ user_service здесь
+        user_service = UserService(database)
         logger.info("✅ Сервисы инициализированы")
         
     except Exception as e:
@@ -85,7 +81,7 @@ async def main():
         logger.info("✅ Middleware лимитов подключен к фото-роутеру")
         
         # ===== РЕГИСТРИРУЕМ ВСЕ РОУТЕРЫ =====
-        dp.include_router(router)
+        dp.include_router(router)  # ← ТОЛЬКО ОДИН РОУТЕР, в нем уже все включено
         logger.info("✅ Все роутеры зарегистрированы")
 
         # Получаем информацию о боте

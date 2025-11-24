@@ -1,3 +1,4 @@
+#app/handlers/promo_handlers.py
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import StateFilter
